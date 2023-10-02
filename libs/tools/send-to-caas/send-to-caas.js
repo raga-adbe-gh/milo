@@ -26,7 +26,7 @@ const [setPublishingTrue, setPublishingFalse, isPublishing] = (() => {
 // Tingle is the js library for displaying modals.
 const loadTingleModalFiles = async (loadScript, loadStyle) => {
   const { miloLibs, codeRoot } = getConfig();
-  const base = miloLibs || codeRoot;
+  const base = miloLibs || codeRoot || 'https://milo.adobe.com/libs';
   if (!window.tingle?.modal) {
     await Promise.all([
       loadScript(`${base}/deps/tingle.js`),
