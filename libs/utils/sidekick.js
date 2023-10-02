@@ -3,7 +3,7 @@ export default function init({ createTag, loadBlock, loadScript, loadStyle }) {
   // manifest v3
   const sendToCaasListener = async (e) => {
     const { host, project, ref: branch, repo, owner } = e.detail.data.config;
-    const { sendToCaaS } = await import('https://milo.adobe.com/tools/send-to-caas/send-to-caas.js');
+    const { sendToCaaS } = await import('../tools/send-to-caas/send-to-caas.js');
     sendToCaaS({ host, project, branch, repo, owner }, loadScript, loadStyle);
   };
 
@@ -25,7 +25,7 @@ export default function init({ createTag, loadBlock, loadScript, loadStyle }) {
   // Support for legacy manifest v2 - Delete once everyone is migrated to v3
   document.addEventListener('send-to-caas', async (e) => {
     const { host, project, branch, repo, owner } = e.detail;
-    const { sendToCaaS } = await import('../../tools/send-to-caas/send-to-caas.js');
+    const { sendToCaaS } = await import('../tools/send-to-caas/send-to-caas.js');
     sendToCaaS({ host, project, branch, repo, owner }, loadScript, loadStyle);
   });
 

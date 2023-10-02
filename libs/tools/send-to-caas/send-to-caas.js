@@ -26,8 +26,8 @@ const [setPublishingTrue, setPublishingFalse, isPublishing] = (() => {
 const loadTingleModalFiles = async (loadScript, loadStyle) => {
   if (!window.tingle?.modal) {
     await Promise.all([
-      loadScript('https://milo.adobe.com/libs/deps/tingle.js'),
-      loadStyle('https://milo.adobe.com/libs/deps/tingle.css'),
+      loadScript('../deps/tingle.js'),
+      loadStyle('../../deps/tingle.css'),
     ]);
   }
 };
@@ -348,7 +348,7 @@ const sendToCaaS = async ({ host = '', project = '', branch = '', repo = '', own
     host: host || window.location.host, project, branch, repo, owner, doc: document,
   });
 
-  loadStyle('https://milo.adobe.com/tools/send-to-caas/send-to-caas.css');
+  loadStyle('./send-to-caas.css');
 
   setPublishingTrue();
 

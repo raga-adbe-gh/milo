@@ -1,4 +1,4 @@
-import { getImsToken } from '../../../tools/utils/utils.js';
+import { getImsToken } from '../../tools/utils/utils.js';
 import { loadScript } from '../../utils/utils.js';
 import { fetchWithTimeout, getLocalStorage, setLocalStorage } from '../utils/utils.js';
 

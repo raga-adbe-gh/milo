@@ -1,11 +1,11 @@
 /* eslint-disable no-continue */
 import { loadScript, loadStyle } from '../../libs/utils/utils.js';
-import { getImsToken } from '../utils/utils.js';
+import { getImsToken } from '../../libs/tools/utils/utils.js';
 import {
   loadTingleModalFiles,
   showAlert,
   showConfirm,
-} from './send-to-caas.js';
+} from '../../libs/tools/send-to-caas/send-to-caas.js';
 import {
   getCardMetadata,
   getCaasProps,
@@ -13,7 +13,7 @@ import {
   postDataToCaaS,
   getConfig,
   setConfig,
-} from './send-utils.js';
+} from '../../libs/tools/send-to-caas/send-utils.js';
 import comEnterpriseToCaasTagMap from './comEnterpriseToCaasTagMap.js';
 
 const LS_KEY = 'bulk-publish-caas';
