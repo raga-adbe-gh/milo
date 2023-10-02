@@ -596,6 +596,7 @@ const postDataToCaaS = async ({ accessToken, caasEnv, caasProps, draftOnly }) =>
       Authorization: `Bearer ${accessToken}`,
       draft: !!draftOnly,
       'caas-env': caasEnv,
+      'user-ims-env': window.adobeid?.environment?.toLowerCase() === 'prod' ? 'prod' : 'stage',
     },
   };
 
