@@ -22,7 +22,7 @@ const [setPublishingTrue, setPublishingFalse, isPublishing] = (() => {
   ];
 })();
 
-// Tingle is the js library for displaying modals
+// Tingle is the js library for displaying modals.
 const loadTingleModalFiles = async (loadScript, loadStyle) => {
   if (!window.tingle?.modal) {
     await Promise.all([
