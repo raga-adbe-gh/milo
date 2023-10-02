@@ -26,7 +26,7 @@ const [setPublishingTrue, setPublishingFalse, isPublishing] = (() => {
 const loadTingleModalFiles = async (loadScript, loadStyle) => {
   if (!window.tingle?.modal) {
     await Promise.all([
-      loadScript('../deps/tingle.js'),
+      loadScript('../../deps/tingle.js'),
       loadStyle('../../deps/tingle.css'),
     ]);
   }
