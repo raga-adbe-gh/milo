@@ -2,6 +2,7 @@
 /* global tingle */
 /* eslint-disable no-alert */
 
+import { getConfig } from '../../utils/utils.js';
 import { getImsToken } from '../utils/utils.js';
 
 import {
@@ -24,10 +25,12 @@ const [setPublishingTrue, setPublishingFalse, isPublishing] = (() => {
 
 // Tingle is the js library for displaying modals.
 const loadTingleModalFiles = async (loadScript, loadStyle) => {
+  const { miloLibs, codeRoot } = getConfig();
+  const base = miloLibs || codeRoot;
   if (!window.tingle?.modal) {
     await Promise.all([
-      loadScript('/libs/deps/tingle.js'),
-      loadStyle('/libs/deps/tingle.css'),
+      loadScript(`${base}/deps/tingle.js`),
+      loadStyle(`${base}/deps/tingle.css`),
     ]);
   }
 };
