@@ -12,6 +12,7 @@ import {
   allowCancelProject,
   polling,
   urls,
+  accessToken,
 } from './state.js';
 import { getItemId } from '../../../tools/sharepoint/shared.js';
 import updateExcelTable from '../../../tools/sharepoint/excel.js';
@@ -110,6 +111,7 @@ export async function startSync() {
   const url = await getMilocUrl();
   setExcelStatus('Sync to langstore/en', '');
   const opts = { method: 'POST' };
+  console.log(accessToken);
   const resp = await fetch(`${url}start-sync?project=${heading.value.projectId}`, opts);
   return resp.status;
 }
