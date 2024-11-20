@@ -93,7 +93,7 @@ export function getUrls(jsonUrls) {
   const { locales } = getConfig();
   // Assume all URLs will be the same locale as the first URL
   const locale = getLocale(locales, jsonUrls[0].pathname);
-  const lang = (locale.prefix.replace(/^\/langstore\//,'/') ?? '/en').replace('/','');
+  const lang = (locale.prefix.replace(/^\/langstore\//,'/') ?? '/en').replace('/','') || 'en';
   // Loop through each url to get langstore information
   return jsonUrls.map((url) => {
     url.langstore = {
