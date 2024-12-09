@@ -81,6 +81,11 @@ export async function getProjectStatus() {
       allowSyncToLangstore.value = false;
     }
 
+    if (json.projectStatus === 'sync') {
+      allowSyncToLangstore.value = true;
+      allowSendForLoc.value = true;
+    }
+
     if (json.projectStatus === 'sync'
     || json.projectStatus === 'created'
     || json.projectStatus === 'download'
