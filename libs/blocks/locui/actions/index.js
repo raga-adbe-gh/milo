@@ -198,7 +198,7 @@ export async function syncToLangstore() {
   // Disable cancel project
   allowCancelProject.value = false;
 
-  if (!heading.value.projectId) {
+  if (!heading.value.projectId || isDraftProject.value) {
     const status = await createProject();
     setTimeout(async () => {
       if (status === 201) {
@@ -262,7 +262,7 @@ export async function sendForLoc() {
   allowCancelProject.value = false;
 
   // If no Project ID, create project first.
-  if (!heading.value.projectId) {
+  if (!heading.value.projectId || isDraftProject.value) {
     const status = await createProject();
     if (status === 201) {
       // Give the service time to digest and error check creating a project
