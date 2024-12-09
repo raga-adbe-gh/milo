@@ -77,13 +77,13 @@ export async function getProjectStatus() {
       setStatus('service-error', 'error', json.projectStatusText);
     }
 
-    if (json.projectStatus === 'sync') {
-      allowSyncToLangstore.value = false;
+    if (json.projectStatus === 'draft') {
+      allowSyncToLangstore.value = true;
+      allowSendForLoc.value = true;
     }
 
     if (json.projectStatus === 'sync') {
-      allowSyncToLangstore.value = true;
-      allowSendForLoc.value = true;
+      allowSyncToLangstore.value = false;
     }
 
     if (json.projectStatus === 'sync'
