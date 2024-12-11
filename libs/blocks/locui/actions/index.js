@@ -114,10 +114,10 @@ async function findPageFragments(path) {
 }
 
 function addFragmentPrefix(fragments, prefix) {
-  return fragments.map((url) => {
+  return fragments ? fragments.map((url) => {
     url.pathname = url.pathname.startsWith(prefix) ? url.pathname : `${prefix}${url.pathname}`;
     return url;
-  });
+  }) : null;
 };
 
 async function findDeepFragments(path) {
