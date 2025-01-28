@@ -117,7 +117,7 @@ export function connectSK(status, standby = null) {
   const sidekick = document.querySelector('helix-sidekick')
     || document.querySelector('aem-sidekick');
   if (sidekick) {
-    sidekick.addEventListener('statusfetched', status);
+    sidekick.addEventListener('status-fetched', status);
   } else {
     standby?.();
     onSkLoaded((sk) => {
