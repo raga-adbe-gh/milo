@@ -31,7 +31,7 @@ export const updateCaptionsLang = (videoUrl, geo) => {
   if (url.searchParams.has('captions')) {
     for (const [langCode, geos] of Object.entries(CaptionsLangMap)) {
       if (geos.includes(geo)) {
-        url.searchParams.set('captions', `${langCode},eng`);
+        url.searchParams.set('captions', `${langCode}${langCode !== 'eng' ? ',eng':''}`);
         break;
       }
     }
