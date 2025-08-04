@@ -3,6 +3,21 @@ import { createTag, getConfig, getFederatedContentRoot } from '../../utils/utils
 
 const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
 
+const updateCaptionsLang = (url, geo, captionsLangMap) => {
+
+  if (geo && captionsLangMap && url.searchParams.has('captions')) {
+    for (const [langCode, geos] of Object.entries(captionsLangMap)) {
+      if (geos.includes(geo)) {
+        const captionParam = langCode === 'eng' ? langCode : `${langCode},eng`;
+        url.searchParams.set('captions', captionParam);
+        break;
+      }
+    }
+  }
+
+  return url.toString();
+};
+
 const createIframe = (a, href) => {
   const videoHref = href || a.href;
 
@@ -62,6 +77,7 @@ export default function init(a) {
       anchorTag: a,
     });
   } else {
+    const url = new URL(a.href);
     const captionsKey = getConfig().captionsKey;
     const federalCR = captionsKey ? getFederatedContentRoot() : null;
     if (federalCR && url.searchParams.has('captions')) {
@@ -70,7 +86,7 @@ export default function init(a) {
           const resp = await res.json();
           if (resp && resp.data) {
             const geo = (getConfig()?.locale?.prefix || '').replace('/', '');
-            const videoHref = updateCaptionsLang(a.href, geo, resp.data);
+            const videoHref = updateCaptionsLang(url, geo, resp.data);
             createIframe(a, videoHref);
             return;
           }
