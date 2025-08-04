@@ -1,5 +1,71 @@
 import { decorateAnchorVideo } from '../../utils/decorate.js';
-import { createTag } from '../../utils/utils.js';
+import { createTag, getFederatedContentRoot } from '../../utils/utils.js';
+
+const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
+
+const updateCaptionsLang = (videoUrl, geo, captionsLangMap) => {
+  const url = new URL(videoUrl);
+
+  if (geo && captionsLangMap && url.searchParams.has('captions')) {
+    for (const [langCode, geos] of Object.entries(captionsLangMap)) {
+      if (geos.includes(geo)) {
+        const captionParam = langCode === 'eng' ? langCode : `${langCode},eng`;
+        url.searchParams.set('captions', captionParam);
+        break;
+      }
+    }
+  }
+
+  return url.toString();
+};
+
+const createIframe = (a, href) => {
+  const videoHref = href || a.href;
+
+  const iframe = createTag('iframe', {
+    src: videoHref,
+    class: 'adobetv',
+    scrolling: 'no',
+    allow: 'encrypted-media; fullscreen',
+    title: 'Adobe Video Publishing Cloud Player',
+    loading: 'lazy',
+  });
+  const embed = createTag('div', { class: 'milo-video' }, iframe);
+  a.insertAdjacentElement('afterend', embed);
+
+  const idMatch = videoHref.match(/\/v\/(\d+)/);
+  const videoId = idMatch ? idMatch[1] : null;
+
+  if (videoId) {
+    window.fetch(`https://video.tv.adobe.com/v/${videoId}?format=json-ld`)
+      .then((res) => res.json())
+      .then(async (info) => {
+        const { setDialogAndElementAttributes } = await import('../../scripts/accessibility.js');
+        setDialogAndElementAttributes({ element: iframe, title: `${info?.jsonLinkedData?.name}` });
+      });
+  }
+
+  window.addEventListener('message', (event) => {
+    if (event.origin !== 'https://video.tv.adobe.com' || !event.data) return;
+    const { state, id } = event.data;
+    if (!['play', 'pause'].includes(state)
+      || !Number.isInteger(id)
+      || !iframe.src.startsWith(`${event.origin}/v/${id}`)) return;
+
+    iframe.setAttribute('data-playing', state === 'play');
+  });
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(({ isIntersecting, target }) => {
+      if (!isIntersecting && target.getAttribute('data-playing') === 'true') {
+        target.contentWindow?.postMessage({ type: 'mpcAction', action: 'pause' }, target.src);
+      }
+    });
+  }, { rootMargin: '0px' });
+  io.observe(iframe);
+
+  a.remove();
+}
 
 export default function init(a) {
   a.classList.add('hide-video');
@@ -12,48 +78,25 @@ export default function init(a) {
       anchorTag: a,
     });
   } else {
-    const iframe = createTag('iframe', {
-      src: a.href,
-      class: 'adobetv',
-      scrolling: 'no',
-      allow: 'encrypted-media; fullscreen',
-      title: 'Adobe Video Publishing Cloud Player',
-      loading: 'lazy',
-    });
-    const embed = createTag('div', { class: 'milo-video' }, iframe);
-    a.insertAdjacentElement('afterend', embed);
-
-    const idMatch = a.href.match(/\/v\/(\d+)/);
-    const videoId = idMatch ? idMatch[1] : null;
-
-    if (videoId) {
-      window.fetch(`https://video.tv.adobe.com/v/${videoId}?format=json-ld`)
-        .then((res) => res.json())
-        .then(async (info) => {
-          const { setDialogAndElementAttributes } = await import('../../scripts/accessibility.js');
-          setDialogAndElementAttributes({ element: iframe, title: `${info?.jsonLinkedData?.name}` });
+    const captionsKey = getConfig().captionsKey;
+    const federalCR = captionsKey ? getFederatedContentRoot() : null;
+    if (federalCR && url.searchParams.has('captions')) {
+      fetch(`${getFederatedContentRoot()}/federal/assets/adobetv/captions.json`)
+        .then(async (res) => {
+          const resp = await res.json();
+          if (resp && resp.data) {
+            const geo = (getConfig()?.locale?.prefix || '').replace('/', '');
+            const videoHref = updateCaptionsLang(a.href, geo, resp.data);
+            createIframe(a, videoHref);
+            return;
+          }
+          createIframe(a);
+        }).catch((e) => {
+          logError('Could not fetch cta-aria-label-config.json', e);
+          createIframe(a);
         });
+    } else {
+      createIframe(a);
     }
-
-    window.addEventListener('message', (event) => {
-      if (event.origin !== 'https://video.tv.adobe.com' || !event.data) return;
-      const { state, id } = event.data;
-      if (!['play', 'pause'].includes(state)
-        || !Number.isInteger(id)
-        || !iframe.src.startsWith(`${event.origin}/v/${id}`)) return;
-
-      iframe.setAttribute('data-playing', state === 'play');
-    });
-
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(({ isIntersecting, target }) => {
-        if (!isIntersecting && target.getAttribute('data-playing') === 'true') {
-          target.contentWindow?.postMessage({ type: 'mpcAction', action: 'pause' }, target.src);
-        }
-      });
-    }, { rootMargin: '0px' });
-    io.observe(iframe);
-
-    a.remove();
   }
 }
