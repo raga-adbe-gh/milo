@@ -81,10 +81,11 @@ export default function init(a) {
     const captionsKey = getConfig().captionsKey;
     const federalCR = captionsKey ? getFederatedContentRoot() : null;
     if (federalCR && url.searchParams.has('captions')) {
-      fetch(`${getFederatedContentRoot()}/federal/assets/adobetv/captions.json`)
+      const captionsUrl = `${getFederatedContentRoot()}/federal/assets/adobetv/captions.json`;
+      fetch(captionsUrl)
         .then(async (res) => {
           const resp = await res.json();
-          if (resp && resp.data) {
+          if (resp?.data) {
             const geo = (getConfig()?.locale?.prefix || '').replace('/', '');
             const videoHref = updateCaptionsLang(url, geo, resp.data);
             createIframe(a, videoHref);
@@ -92,7 +93,7 @@ export default function init(a) {
           }
           createIframe(a);
         }).catch((e) => {
-          logError('Could not fetch cta-aria-label-config.json', e);
+          logError(`Could not fetch ${captionsUrl}`, e);
           createIframe(a);
         });
     } else {
