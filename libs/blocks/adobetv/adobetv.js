@@ -5,13 +5,11 @@ const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
 
 const updateCaptionsLang = (url, geo, captionsLangMap) => {
 
-  if (geo && captionsLangMap && url.searchParams.has('captions')) {
-    for (const [langCode, geos] of Object.entries(captionsLangMap)) {
-      if (geos.includes(geo)) {
-        const captionParam = langCode === 'eng' ? langCode : `${langCode},eng`;
-        url.searchParams.set('captions', captionParam);
-        break;
-      }
+  if (geo && captionsLangMap) {
+    const map = captionsLangMap.find((l) => l?.geos?.split(',')?.includes(geo));
+    if (map) {
+      const captionParam = map.captions === 'eng' ? map.captions : `${map.captions},eng`;
+      url.searchParams.set('captions', captionParam);
     }
   }
 
