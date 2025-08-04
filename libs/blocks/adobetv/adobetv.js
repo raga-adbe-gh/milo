@@ -1,23 +1,7 @@
 import { decorateAnchorVideo } from '../../utils/decorate.js';
-import { createTag, getFederatedContentRoot } from '../../utils/utils.js';
+import { createTag, getConfig, getFederatedContentRoot } from '../../utils/utils.js';
 
 const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
-
-const updateCaptionsLang = (videoUrl, geo, captionsLangMap) => {
-  const url = new URL(videoUrl);
-
-  if (geo && captionsLangMap && url.searchParams.has('captions')) {
-    for (const [langCode, geos] of Object.entries(captionsLangMap)) {
-      if (geos.includes(geo)) {
-        const captionParam = langCode === 'eng' ? langCode : `${langCode},eng`;
-        url.searchParams.set('captions', captionParam);
-        break;
-      }
-    }
-  }
-
-  return url.toString();
-};
 
 const createIframe = (a, href) => {
   const videoHref = href || a.href;
