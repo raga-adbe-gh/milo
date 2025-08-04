@@ -81,9 +81,12 @@ export default function init(a) {
     const captionsKey = getConfig().captionsKey;
     const federalCR = captionsKey ? getFederatedContentRoot() : null;
     if (federalCR && url.searchParams.has('captions')) {
-      const captionsUrl = `${getFederatedContentRoot()}/federal/assets/adobetv/captions.json`;
+      const captionsUrl = `${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
       fetch(captionsUrl)
         .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(`Failed to fetch ${captionsUrl}`);
+          }
           const resp = await res.json();
           if (resp?.data) {
             const geo = (getConfig()?.locale?.prefix || '').replace('/', '');
