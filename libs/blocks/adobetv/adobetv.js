@@ -1,13 +1,11 @@
 import { decorateAnchorVideo } from '../../utils/decorate.js';
 import { createTag, getConfig, getFederatedContentRoot } from '../../utils/utils.js';
 
-let captionsLangMap = null;
 let captionsLangMapPromise = null;
 
 const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
 
 const updateCaptionsLang = (url, geo, captionsLangMap) => {
-
   if (geo && captionsLangMap) {
     const entry = captionsLangMap.find((l) => l?.geos?.split(',')?.includes(geo));
     if (entry) {
@@ -15,7 +13,6 @@ const updateCaptionsLang = (url, geo, captionsLangMap) => {
       url.searchParams.set('captions', captionParam);
     }
   }
-
   return url.toString();
 };
 
@@ -102,7 +99,7 @@ export default function init(a) {
       if (captionsLangMapPromise) {
         return createIframeWithCaptions(a, url, geo, captionsLangMapPromise);
       }
-      const captionsUrl = `https://${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
+      const captionsUrl = `${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
       captionsLangMapPromise = fetch(captionsUrl).then(async (res) => {
         if (!res.ok) {
           return new Promise(() => { throw new Error(`Failed to fetch ${captionsUrl}`); });
