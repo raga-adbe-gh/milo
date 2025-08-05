@@ -2,6 +2,8 @@ import { decorateAnchorVideo } from '../../utils/decorate.js';
 import { createTag, getConfig, getFederatedContentRoot } from '../../utils/utils.js';
 
 let captionsLangMap = null;
+let captionsLangMapPromise = null;
+
 const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
 
 const updateCaptionsLang = (url, geo, captionsLangMap) => {
@@ -65,6 +67,21 @@ const createIframe = (a, href) => {
   a.remove();
 }
 
+const createIframeWithCaptions = (a, url, geo, captionsLangMapPromise) => {
+  captionsLangMapPromise.then((resp) => {
+    if (resp?.data) {
+      captionsLangMap = resp.data;
+      const videoHref = updateCaptionsLang(url, geo, captionsLangMap);
+      createIframe(a, videoHref);
+      return;
+    }
+    createIframe(a);
+  }).catch((e) => {
+    logError(`Could not fetch ${captionsUrl}`, e);
+    createIframe(a);
+  });
+}
+
 export default function init(a) {
   a.classList.add('hide-video');
   const bgBlocks = ['aside', 'marquee', 'hero-marquee', 'long-form'];
@@ -82,29 +99,17 @@ export default function init(a) {
     const geo = (locale?.prefix || '').replace('/', '');
 
     if (federalCR && url.searchParams.has('captions')) {
-      if (captionsLangMap) {
-        const videoHref = updateCaptionsLang(url, geo, captionsLangMap);
-        createIframe(a, videoHref);
-        return;
+      if (captionsLangMapPromise) {
+        return createIframeWithCaptions(a, url, geo, captionsLangMapPromise);
       }
       const captionsUrl = `${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
-      fetch(captionsUrl)
-        .then(async (res) => {
-          if (!res.ok) {
-            throw new Error(`Failed to fetch ${captionsUrl}`);
-          }
-          const resp = await res.json();
-          if (resp?.data) {
-            captionsLangMap = resp.data;
-            const videoHref = updateCaptionsLang(url, geo, captionsLangMap);
-            createIframe(a, videoHref);
-            return;
-          }
-          createIframe(a);
-        }).catch((e) => {
-          logError(`Could not fetch ${captionsUrl}`, e);
-          createIframe(a);
-        });
+      captionsLangMapPromise = fetch(captionsUrl).then(async (res) => {
+        if (!res.ok) {
+          return new Promise(() => { throw new Error(`Failed to fetch ${captionsUrl}`); });
+        }
+        return res.json();
+      });
+      createIframeWithCaptions(a, url, geo, captionsLangMapPromise);
     } else {
       createIframe(a);
     }
