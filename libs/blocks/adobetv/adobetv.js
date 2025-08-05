@@ -102,7 +102,7 @@ export default function init(a) {
       if (captionsLangMapPromise) {
         return createIframeWithCaptions(a, url, geo, captionsLangMapPromise);
       }
-      const captionsUrl = `${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
+      const captionsUrl = `https://${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
       captionsLangMapPromise = fetch(captionsUrl).then(async (res) => {
         if (!res.ok) {
           return new Promise(() => { throw new Error(`Failed to fetch ${captionsUrl}`); });
