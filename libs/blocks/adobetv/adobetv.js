@@ -77,7 +77,7 @@ const createIframeWithCaptions = (a, url, geo, captionsLangMapPromise) => {
     }
     createIframe(a);
   }).catch((e) => {
-    logError(`Could not fetch ${captionsUrl}`, e);
+    logError(`Could not get atv captions`, e);
     createIframe(a);
   });
 }
