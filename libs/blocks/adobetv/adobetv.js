@@ -1,14 +1,15 @@
 import { decorateAnchorVideo } from '../../utils/decorate.js';
 import { createTag, getConfig, getFederatedContentRoot } from '../../utils/utils.js';
 
+let captionsLangMap = null;
 const logError = (msg, error) => window.lana.log(`${msg}: ${error}`);
 
 const updateCaptionsLang = (url, geo, captionsLangMap) => {
 
   if (geo && captionsLangMap) {
-    const map = captionsLangMap.find((l) => l?.geos?.split(',')?.includes(geo));
-    if (map) {
-      const captionParam = map.captions === 'eng' ? map.captions : `${map.captions},eng`;
+    const entry = captionsLangMap.find((l) => l?.geos?.split(',')?.includes(geo));
+    if (entry) {
+      const captionParam = entry.captions === 'eng' ? entry.captions : `${entry.captions},eng`;
       url.searchParams.set('captions', captionParam);
     }
   }
@@ -76,9 +77,16 @@ export default function init(a) {
     });
   } else {
     const url = new URL(a.href);
-    const captionsKey = getConfig().captionsKey;
-    const federalCR = captionsKey ? getFederatedContentRoot() : null;
+    const { captionsKey, locale } = getConfig();
+    const federalCR = captionsKey && getFederatedContentRoot();
+    const geo = (locale?.prefix || '').replace('/', '');
+
     if (federalCR && url.searchParams.has('captions')) {
+      if (captionsLangMap) {
+        const videoHref = updateCaptionsLang(url, geo, captionsLangMap);
+        createIframe(a, videoHref);
+        return;
+      }
       const captionsUrl = `${getFederatedContentRoot()}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
       fetch(captionsUrl)
         .then(async (res) => {
@@ -87,8 +95,8 @@ export default function init(a) {
           }
           const resp = await res.json();
           if (resp?.data) {
-            const geo = (getConfig()?.locale?.prefix || '').replace('/', '');
-            const videoHref = updateCaptionsLang(url, geo, resp.data);
+            captionsLangMap = resp.data;
+            const videoHref = updateCaptionsLang(url, geo, captionsLangMap);
             createIframe(a, videoHref);
             return;
           }
