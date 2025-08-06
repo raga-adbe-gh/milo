@@ -94,13 +94,13 @@ export default function init(a) {
     });
   } else {
     const url = new URL(a.href);
-    const { captionsKey, locale } = getConfig();
+    const { atvCaptionsKey, locale } = getConfig();
     const geo = (locale?.prefix || '').replace('/', '');
-    const federalCR = captionsKey && getFederatedContentRoot();
+    const federalCR = atvCaptionsKey && getFederatedContentRoot();
 
     if (federalCR && url.searchParams.has('captions')) {
       if (!captionsLangMapPromise) {
-        const captionsUrl = `${federalCR}/federal/assets/data/adobetv-captions.json?sheet=${captionsKey}`;
+        const captionsUrl = `${federalCR}/federal/assets/data/adobetv-captions.json?sheet=${atvCaptionsKey}`;
         captionsLangMapPromise = fetch(captionsUrl).then((res) => {
           if (!res.ok) {
             return new Promise(() => { throw new Error(`Failed to fetch ${captionsUrl}`); });
