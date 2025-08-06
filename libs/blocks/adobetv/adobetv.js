@@ -94,7 +94,7 @@ export default function init(a) {
     });
   } else {
     const url = new URL(a.href);
-    const { atvCaptionsKey =  window.location.href.split('--')?.length > 1 ? urlParts[1] : '', locale } = getConfig();
+    const { atvCaptionsKey =  window.location.href.split('--')?.length > 1 ? window.location.href.split('--')[1] : '', locale } = getConfig();
     const geo = (locale?.prefix || '').replace('/langstore', '').replace('/', '');
     const federalCR = atvCaptionsKey && getFederatedContentRoot();
 
