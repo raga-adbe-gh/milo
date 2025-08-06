@@ -309,8 +309,6 @@ export const [setConfig, updateConfig, getConfig] = (() => {
         && (conf.useDotHtml ?? PAGE_URL.pathname.endsWith('.html'));
       config.entitlements = handleEntitlements;
       config.consumerEntitlements = conf.entitlements || [];
-      const urlParts = window.location.href.split('--');
-      config.atvCaptionsKey = conf.atvCaptionsKey || (urlParts?.length > 1 ? urlParts[1] : '');
       setupMiloObj(config);
       return config;
     },
