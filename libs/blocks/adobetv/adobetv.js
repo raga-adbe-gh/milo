@@ -95,6 +95,7 @@ export default function init(a) {
   } else {
     const url = new URL(a.href);
     const { atvCaptionsKey, locale } = getConfig();
+    consle.log(atvCaptionsKey.length);
     const geo = (locale?.prefix || '').replace('/langstore', '').replace('/', '');
     const federalCR = atvCaptionsKey && getFederatedContentRoot();
 
