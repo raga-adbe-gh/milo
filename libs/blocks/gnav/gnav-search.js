@@ -1,11 +1,9 @@
-import { getConfig, getMetadata, createTag } from '../../utils/utils.js';
+import { createTag } from '../../utils/utils.js';
 
 const SCOPE = 'adobecom';
 const API_KEY = 'adobedotcom2';
 
-
-
-const getHelpxLink = (searchStr, country = 'US') => `https://helpx.adobe.com/globalsearch.html?q=${encodeURIComponent(searchStr)}&start_index=0&country=${country}`;
+const getHelpxLink = (searchStr, prefix = '', country = 'US') => `https://helpx.adobe.com${prefix}/globalsearch.html?q=${encodeURIComponent(searchStr)}&start_index=0&country=${country}`;
 const getSearchLink = (searchStr, locale = 'en_US') => `https://adobesearch.adobe.io/autocomplete/completions?q[locale]=${locale}&scope=${SCOPE}&q[text]=${encodeURIComponent(searchStr)}`;
 
 const fetchResults = async (searchStr, locale = 'en_US') => {
@@ -20,10 +18,10 @@ const fetchResults = async (searchStr, locale = 'en_US') => {
   return null;
 };
 
-const getNoResultsEl = (value) => {
+const getNoResultsEl = (value, prefix, country) => {
   const noResultsTxt = 'Try our advanced search';
   const a = createTag('a', {
-    href: getHelpxLink(value),
+    href: getHelpxLink(value, prefix, country),
     'aria-label': noResultsTxt,
   }, noResultsTxt);
   return createTag('li', {}, a);
@@ -40,29 +38,27 @@ const wrapValueInSpan = (value, suggestion, linkEl) => {
   }, linkEl);
 };
 
-const updateSearchResults = (value, suggestions, resultsEl, searchInputEl) => {
-  // If no value is provided, search results dropdown should not be populated
+const updateSearchResults = (value, suggestions, locale, resultsEl, searchInputEl) => {
   if (!value.length) {
     resultsEl.replaceChildren();
     searchInputEl.classList.remove('gnav-search-input--isPopulated');
     return;
   }
 
-  // Add a modifier class if the input is populated
+  resultsEl.classList.remove('no-results');
   searchInputEl.classList.add('gnav-search-input--isPopulated');
 
-  // If there are no suggestions, the advanced search option should be shown
   if (!suggestions.length) {
-    const noResults = getNoResultsEl(value);
+    const noResults = getNoResultsEl(value, locale.prefix, locale.geo);
     resultsEl.replaceChildren(noResults);
+    resultsEl.classList.add('no-results');
     return;
   }
 
-  // Show suggestions in the dropdown if they exist
   const df = document.createDocumentFragment();
   suggestions.forEach((suggestion) => {
     const a = createTag('a', {
-      href: getHelpxLink(suggestion),
+      href: getHelpxLink(suggestion, locale.prefix, locale.geo),
       'aria-label': suggestion,
     });
     const linkEl = wrapValueInSpan(value, suggestion, a);
@@ -77,10 +73,10 @@ const getSuggestions = (json) => {
   return json.suggested_completions.map((suggestion) => suggestion?.name);
 };
 
-const onSearchInput = async (value, resultsEl, locale, searchInputEl) => {
-  const results = await fetchResults(value, locale);
+const onSearchInput = async ({ value, resultsEl, locale, searchInputEl }) => {
+  const results = await fetchResults(value, locale?.ietf?.replace('-', '_'));
   const suggestions = getSuggestions(results);
-  updateSearchResults(value, suggestions, resultsEl, searchInputEl);
+  updateSearchResults(value, suggestions, locale, resultsEl, searchInputEl);
 };
 
 export {

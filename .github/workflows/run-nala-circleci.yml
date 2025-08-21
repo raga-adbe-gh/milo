@@ -1,0 +1,16 @@
+name: Nala Tests on CircleCI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trigger-circleci:
+    name: Trigger CircleCI Job
+    if: github.repository == 'adobecom/milo'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - run: |
+          curl -X POST 'https://circle.ci.adobe.com/api/v2/project/gh/wcms/nala/pipeline' \
+              -H 'Circle-Token: ${{ secrets.CCI_TOKEN }}' \
+              -H 'content-type: application/json' \
+              -d "{\"branch\":\"main\"}"

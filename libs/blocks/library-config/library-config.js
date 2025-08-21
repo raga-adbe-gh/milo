@@ -1,10 +1,15 @@
-import { createTag } from '../../utils/utils.js';
+import { createTag, SLD } from '../../utils/utils.js';
 
 const LIBRARY_PATH = '/docs/library/library.json';
 
-async function loadBlocks(content, list, query) {
+async function loadBlocks({ content, list, query, type }) {
   const { default: blocks } = await import('./lists/blocks.js');
-  blocks(content, list, query);
+  blocks(content, list, query, type);
+}
+
+async function loadTemplates({ content, list, query, type }) {
+  const { default: templates } = await import('./lists/templates.js');
+  templates(content, list, query, type);
 }
 
 async function loadPlaceholders(content, list) {
@@ -12,9 +17,9 @@ async function loadPlaceholders(content, list) {
   placeholders(content, list);
 }
 
-async function loadIcons(content, list) {
+async function loadIcons({ content, list, query }) {
   const { default: icons } = await import('./lists/icons.js');
-  icons(content, list);
+  icons(content, list, query);
 }
 
 async function loadAssets(content, list) {
@@ -22,7 +27,12 @@ async function loadAssets(content, list) {
   assets(content, list);
 }
 
-function addSearch(content, list) {
+async function loadPersonalization(content, list) {
+  const { default: personalization } = await import('./lists/personalization.js');
+  personalization(content, list);
+}
+
+function addSearch({ content, list, type }) {
   const skLibrary = list.closest('.sk-library');
   const header = skLibrary.querySelector('.sk-library-header');
   let search = skLibrary.querySelector('.sk-library-search');
@@ -30,6 +40,7 @@ function addSearch(content, list) {
     search = createTag('div', { class: 'sk-library-search' });
     const searchInput = createTag('input', { class: 'sk-library-search-input', placeholder: 'Search...' });
     const clear = createTag('div', { class: 'sk-library-search-clear is-hidden' });
+
     searchInput.addEventListener('input', (e) => {
       const query = e.target.value;
       if (query === '') {
@@ -37,12 +48,37 @@ function addSearch(content, list) {
       } else {
         clear.classList.remove('is-hidden');
       }
-      loadBlocks(content, list, query);
+
+      switch (type) {
+        case 'blocks':
+          loadBlocks({ content, list, query, type });
+          break;
+        case 'templates':
+          loadTemplates({ content, list, query, type });
+          break;
+        case 'icons':
+          loadIcons({ content, list, query });
+          break;
+        default:
+      }
     });
     clear.addEventListener('click', (e) => {
       e.target.classList.add('is-hidden');
       e.target.closest('.sk-library-search').querySelector('.sk-library-search-input').value = '';
-      loadBlocks(content, list);
+      const query = e.target.value;
+
+      switch (type) {
+        case 'blocks':
+          loadBlocks({ content, list, query, type });
+          break;
+        case 'templates':
+          loadTemplates({ content, list, query, type });
+          break;
+        case 'icons':
+          loadIcons({ content, list, query });
+          break;
+        default:
+      }
     });
     search.append(searchInput);
     search.append(clear);
@@ -57,40 +93,50 @@ async function loadList(type, content, list) {
   const query = list.closest('.sk-library').querySelector('.sk-library-search-input')?.value;
   switch (type) {
     case 'blocks':
-      addSearch(content, list);
-      loadBlocks(content, list, query);
+      addSearch({ content, list, type });
+      loadBlocks({ content, list, query, type });
+      break;
+    case 'templates':
+      addSearch({ content, list, type });
+      loadTemplates({ content, list, query, type });
       break;
     case 'placeholders':
       loadPlaceholders(content, list);
       break;
     case 'icons':
-      loadIcons(content, list);
+      addSearch({ content, list, type });
+      loadIcons({ content, list, query: '' });
       break;
     case 'assets':
       loadAssets(content, list);
       break;
+    case 'MEP_personalization':
+      loadPersonalization(content, list);
+      break;
     default:
       await import('../../utils/lana.js');
-      window.lana.log(`Library type not supported: ${type}`, { clientId: 'milo', sampleRate: 100 });
+      window.lana?.log(`Library type not supported: ${type}`, { clientId: 'milo' });
   }
 }
 
-async function fetchLibrary(domain) {
-  const { searchParams } = new URL(window.location.href);
-  const suppliedLibrary = searchParams.get('library');
+async function fetchLibrary(domain, suppliedLibrary) {
   const library = suppliedLibrary || `${domain}${LIBRARY_PATH}`;
-
-  const resp = await fetch(library);
-  if (!resp.ok) return null;
-  return resp.json();
+  try {
+    const resp = await fetch(library);
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
 }
 
 async function getSuppliedLibrary() {
   const { searchParams } = new URL(window.location.href);
   const repo = searchParams.get('repo');
   const owner = searchParams.get('owner');
+  const library = searchParams.get('library');
   if (!repo || !owner) return null;
-  return fetchLibrary(`https://main--${repo}--${owner}.hlx.live`);
+  return fetchLibrary(`https://main--${repo}--${owner}.${SLD}.live`, library);
 }
 
 async function fetchAssetsData(path) {
@@ -109,10 +155,12 @@ async function combineLibraries(base, supplied) {
   const assetsPath = url.searchParams.get('assets');
 
   const library = {
-    blocks: base.blocks.data,
-    placeholders: base.placeholders?.data,
-    icons: base.icons?.data,
     assets: await fetchAssetsData(assetsPath),
+    blocks: base.blocks.data,
+    templates: base.templates?.data,
+    icons: base.icons?.data,
+    MEP_personalization: base.personalization?.data,
+    placeholders: base.placeholders?.data,
   };
 
   if (supplied) {
@@ -122,6 +170,10 @@ async function combineLibraries(base, supplied) {
 
     if (supplied.placeholders.data.length > 0) {
       library.placeholders = supplied.placeholders.data;
+    }
+
+    if (supplied.templates?.data.length > 0) {
+      library.templates.push(...supplied.templates.data);
     }
   }
 
@@ -137,7 +189,7 @@ function createList(libraries) {
   Object.keys(libraries).forEach((type) => {
     if (!libraries[type] || libraries[type].length === 0) return;
 
-    const item = createTag('li', { class: 'content-type' }, type);
+    const item = createTag('li', { class: 'content-type' }, type.replace('_', ' '));
     libraryList.append(item);
 
     const list = document.createElement('ul');
@@ -146,7 +198,7 @@ function createList(libraries) {
 
     item.addEventListener('click', (e) => {
       const skLibrary = e.target.closest('.sk-library');
-      skLibrary.querySelector('.sk-library-title-text').textContent = type;
+      skLibrary.querySelector('.sk-library-title-text').textContent = type.replace('_', ' ');
       libraryList.classList.add('inset');
       list.classList.add('inset');
       skLibrary.classList.add('allow-back');
@@ -172,6 +224,10 @@ function createHeader() {
       el.classList.remove('inset');
     });
     skLibrary.classList.remove('allow-back');
+
+    // Remove library search if it's been added
+    const search = skLibrary.querySelector('.sk-library-search');
+    if (search) search.remove();
   });
   return header;
 }

@@ -22,6 +22,7 @@ it('verify default options', () => {
     sampleRate: 1,
     tags: '',
     implicitSampleRate: 1,
+    isProdDomain: false,
     useProd: true,
   });
 });
@@ -57,7 +58,7 @@ describe('LANA', () => {
       expect(xhrRequests.length).to.equal(1);
       expect(xhrRequests[0].method).to.equal('GET');
       expect(xhrRequests[0].url).to.equal(
-        'https://lana.adobeio.com/?m=Promise%20Rejection&c=testClientId&s=100&t=i',
+        'https://www.stage.adobe.com/lana/ll?m=Promise%20Rejection&c=testClientId&s=100&t=i',
       );
       done();
     };
@@ -72,7 +73,7 @@ describe('LANA', () => {
       expect(xhrRequests.length).to.equal(1);
       expect(xhrRequests[0].method).to.equal('GET');
       expect(xhrRequests[0].url).to.equal(
-        'https://lana.adobeio.com/?m=&c=testClientId&s=100&t=i',
+        'https://www.stage.adobe.com/lana/ll?m=&c=testClientId&s=100&t=i',
       );
       done();
     };
@@ -88,7 +89,7 @@ describe('LANA', () => {
     expect(xhrRequests.length).to.equal(1);
     expect(xhrRequests[0].method).to.equal('GET');
     expect(xhrRequests[0].url).to.equal(
-      `https://lana.adobeio.com/?m=${expectedMsg}&c=testClientId&s=100&t=e`,
+      `https://www.stage.adobe.com/lana/ll?m=${expectedMsg}&c=testClientId&s=100&t=e`,
     );
   });
 
@@ -96,6 +97,11 @@ describe('LANA', () => {
     window.lana.debug = true;
     window.lana.log('Test debug log message', { clientId: 'debugClientId' });
     const serverResponse = 'client=debugClientId,type=e,sample=1,user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36,referer=undefined,ip=23.56.175.228,message=Test debug log message';
+
+    // Check the URL to make sure it includes r=d and the debug flag
+    expect(xhrRequests[0].url).to.contain('r=d');
+    expect(xhrRequests[0].url).to.contain('&d');
+
     xhrRequests[0].respond(200, { 'Content-Type': 'text/html' }, serverResponse);
 
     setTimeout(() => {
@@ -109,6 +115,7 @@ describe('LANA', () => {
           endpointStage: 'https://www.stage.adobe.com/lana/ll',
           errorType: 'e',
           implicitSampleRate: 100,
+          isProdDomain: false,
           sampleRate: 100,
           tags: '',
           useProd: true,
@@ -132,6 +139,7 @@ describe('LANA', () => {
         endpointStage: 'https://www.stage.adobe.com/lana/ll',
         errorType: 'e',
         implicitSampleRate: 100,
+        isProdDomain: false,
         sampleRate: 100,
         tags: '',
         useProd: true,
@@ -153,7 +161,7 @@ describe('LANA', () => {
     expect(xhrRequests.length).to.equal(1);
     expect(xhrRequests[0].method).to.equal('GET');
     expect(xhrRequests[0].url).to.equal(
-      'https://lana.adobeio.com/?m=I%20set%20the%20client%20id&c=testClientId&s=100&t=e&tags=commerce,pricestore',
+      'https://www.stage.adobe.com/lana/ll?m=I%20set%20the%20client%20id&c=testClientId&s=100&t=e&tags=commerce,pricestore',
     );
   });
 
@@ -167,7 +175,136 @@ describe('LANA', () => {
     expect(xhrRequests.length).to.equal(1);
     expect(xhrRequests[0].method).to.equal('GET');
     expect(xhrRequests[0].url).to.equal(
-      'https://www.adobe.com/lana/ll?m=only%20the%20clientId%20set%20in%20window.lana.options&c=blah&s=100&t=e',
+      'https://www.stage.adobe.com/lana/ll?m=only%20the%20clientId%20set%20in%20window.lana.options&c=blah&s=100&t=e',
     );
+  });
+
+  it('The lana-sample query param overrides existing sampleRate', () => {
+    window.lana.options = {
+      clientId: 'blah',
+      sampleRate: 0,
+      implicitSampleRate: 0,
+    };
+    const originalUrl = window.location.href;
+
+    window.lana.log('Sample rate is zero so should not be logged');
+    expect(xhrRequests.length).to.equal(0);
+
+    // create a new url based on the current url that adds a query param for lana-sample
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('lana-sample', '100');
+
+    window.history.pushState({ path: newUrl.toString() }, '', newUrl.toString());
+
+    window.lana.log('lana-sample query param');
+    expect(xhrRequests.length).to.equal(1);
+    expect(xhrRequests[0].method).to.equal('GET');
+    expect(xhrRequests[0].url).to.equal(
+      'https://www.stage.adobe.com/lana/ll?m=lana-sample%20query%20param&c=blah&s=100&t=e',
+    );
+
+    window.history.pushState({ path: originalUrl }, '', originalUrl);
+  });
+
+  it('Invalid lana-sample query params are ignored', () => {
+    window.lana.options = {
+      clientId: 'blah',
+      sampleRate: 100,
+      implicitSampleRate: 100,
+    };
+    const originalUrl = window.location.href;
+
+    // create a new url based on the current url that adds a query param for lana-sample
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('lana-sample', 'notvalid');
+
+    window.history.pushState({ path: newUrl.toString() }, '', newUrl.toString());
+
+    window.lana.log('lana-sample query param');
+    expect(xhrRequests.length).to.equal(1);
+    expect(xhrRequests[0].method).to.equal('GET');
+    expect(xhrRequests[0].url).to.equal(
+      'https://www.stage.adobe.com/lana/ll?m=lana-sample%20query%20param&c=blah&s=100&t=e',
+    );
+
+    window.history.pushState({ path: originalUrl }, '', originalUrl);
+  });
+
+  it('uses severity if defined in options', () => {
+    window.lana.log('Testing severity', { severity: 'w' });
+    expect(xhrRequests.length).to.equal(1);
+    expect(xhrRequests[0].method).to.equal('GET');
+    expect(xhrRequests[0].url).to.equal(
+      'https://www.stage.adobe.com/lana/ll?m=Testing%20severity&c=testClientId&s=100&t=e&r=w',
+    );
+  });
+
+  it('uses debug severity when in debug mode', () => {
+    window.lana.debug = true;
+    window.lana.log('Debug mode test');
+    expect(xhrRequests.length).to.equal(1);
+    expect(xhrRequests[0].method).to.equal('GET');
+    expect(xhrRequests[0].url).to.equal(
+      'https://www.stage.adobe.com/lana/ll?m=Debug%20mode%20test&c=testClientId&s=100&t=e&r=d&d',
+    );
+  });
+
+  it('explicit severity takes precedence over debug mode default', () => {
+    window.lana.debug = true;
+    window.lana.log('Explicit severity test', { severity: 'w' });
+    expect(xhrRequests.length).to.equal(1);
+    expect(xhrRequests[0].method).to.equal('GET');
+    expect(xhrRequests[0].url).to.equal(
+      'https://www.stage.adobe.com/lana/ll?m=Explicit%20severity%20test&c=testClientId&s=100&t=e&r=w&d',
+    );
+
+    // Also test with invalid severity to verify debug mode is used for fallback
+    window.lana.log('Invalid severity test', { severity: 'invalid' });
+    expect(xhrRequests.length).to.equal(2);
+    expect(xhrRequests[1].method).to.equal('GET');
+    expect(xhrRequests[1].url).to.equal(
+      'https://www.stage.adobe.com/lana/ll?m=Invalid%20severity%20test&c=testClientId&s=100&t=e&r=d&d',
+    );
+    expect(console.warn.called).to.be.true;
+    expect(console.warn.args[0][0]).to.include('Invalid severity');
+    expect(console.warn.args[0][0]).to.include('Defaulting to \'d\'');
+  });
+
+  it('prevents XSS by properly encoding message content', () => {
+    // Test with a string containing characters that should be encoded for XSS prevention
+    // According to standards, encodeURIComponent does NOT encode: A-Z a-z 0-9 - _ . ! ~ * ' ( )
+    // But it DOES encode: < > " & ; , / ? : @ & = + $ #
+    const maliciousString = '<>"&;,/?:@=+$#';
+
+    // Create a reference properly encoded string using the standard function
+    const properlyEncoded = encodeURIComponent(maliciousString);
+
+    window.lana.log(maliciousString);
+    expect(xhrRequests.length).to.equal(1);
+
+    // Verify the URL contains properly encoded values
+    const { url } = xhrRequests[0];
+    const msgParam = url.match(/m=([^&]*)/)[1];
+
+    // The encoded message should match what encodeURIComponent would produce
+    expect(msgParam).to.equal(properlyEncoded);
+
+    // Specifically check that key characters are encoded in the message parameter
+    // Note: We're checking msgParam, not the entire URL,
+    // because & is a valid URL parameter separator
+    expect(msgParam).not.to.include('<');
+    expect(msgParam).not.to.include('>');
+    expect(msgParam).not.to.include('"');
+    expect(msgParam).not.to.include('&');
+
+    // Verify encoded versions exist in the message parameter
+    expect(msgParam).to.include('%3C'); // < encoded
+    expect(msgParam).to.include('%3E'); // > encoded
+    expect(msgParam).to.include('%22'); // " encoded
+    expect(msgParam).to.include('%26'); // & encoded
+
+    // Double-check that decoding gets back the original string
+    const decodedMsg = decodeURIComponent(msgParam);
+    expect(decodedMsg).to.equal(maliciousString);
   });
 });

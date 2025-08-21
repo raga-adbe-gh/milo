@@ -51,6 +51,7 @@ export function getDocPathFromUrl(url) {
   if (!path) {
     return undefined;
   }
+  if (path.endsWith('.json')) return path.replace(/\.json$/, '.xlsx');
   if (path.endsWith('/')) {
     path += 'index';
   } else if (path.endsWith('.html')) {
@@ -67,6 +68,12 @@ export function getUrlInfo() {
   function getParam(name) {
     return location.searchParams.get(name);
   }
+
+  function isValidReferrer(url) {
+    const allowedHosts = ['adobe.sharepoint.com'];
+    return allowedHosts.includes(new URL(url)?.hostname);
+  }
+
   const projectName = getParam('project');
   const sub = projectName ? projectName.split('--') : [];
 
@@ -80,29 +87,63 @@ export function getUrlInfo() {
     owner,
     repo,
     ref,
-    origin: `https://${ref}--${repo}--${owner}.hlx.page`,
+    origin: `https://${ref}--${repo}--${owner}.hlx.page`, // TODO ADD HLX5 SUPPORT
     isValid() {
-      return sp && owner && repo && ref;
+      return sp && owner && repo && ref && isValidReferrer(sp);
     },
   };
   return urlInfo;
 }
 
-export async function simulatePreview(path, retryAttempt = 1) {
+export async function simulatePreview(path, retryAttempt = 1, isFloodgate, fgColor) {
   const previewStatus = { success: true, path };
   try {
     getUrlInfo();
-    const previewUrl = `https://admin.hlx.page/preview/${urlInfo.owner}/${urlInfo.repo}/${urlInfo.ref}${path}`;
+    const repo = isFloodgate ? `${urlInfo.repo}-${fgColor}` : urlInfo.repo;
+    const previewUrl = `https://admin.hlx.page/preview/${urlInfo.owner}/${repo}/${urlInfo.ref}${path}`;
     const response = await fetch(
       `${previewUrl}`,
       { method: 'POST' },
     );
     if (!response.ok && retryAttempt <= MAX_RETRIES) {
-      await simulatePreview(path, retryAttempt + 1);
+      await simulatePreview(path, retryAttempt + 1, isFloodgate, fgColor);
     }
     previewStatus.responseJson = await response.json();
   } catch (error) {
     previewStatus.success = false;
   }
   return previewStatus;
+}
+
+export function getAnchorHtml(url, text) {
+  return `<a href="${url}" target="_new">${text}</a>`;
+}
+
+function getLinkedPagePath(spShareUrl, pagePath) {
+  return getAnchorHtml(spShareUrl.replace('<relativePath>', pagePath), pagePath);
+}
+
+export function getLinkOrDisplayText(spViewUrl, docStatus) {
+  const pathOrMsg = docStatus.msg;
+  return docStatus.hasSourceFile ? getLinkedPagePath(spViewUrl, pathOrMsg) : pathOrMsg;
+}
+
+export function showButtons(buttonIds) {
+  buttonIds.forEach((buttonId) => {
+    document.getElementById(buttonId).classList.remove('hidden');
+  });
+}
+
+export function hideButtons(buttonIds) {
+  buttonIds.forEach((buttonId) => {
+    document.getElementById(buttonId).classList.add('hidden');
+  });
+}
+
+export async function fetchProjectFile(url, retryAttempt) {
+  const response = await fetch(url);
+  if (!response.ok && retryAttempt <= MAX_RETRIES) {
+    await fetchProjectFile(url, retryAttempt + 1);
+  }
+  return response;
 }

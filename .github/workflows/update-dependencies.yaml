@@ -1,0 +1,43 @@
+name: Update dependencies
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+    - name: Update ims lib and create PR if needed
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      with:
+        script: |
+          const updateDependency = require('./.github/workflows/update-script.js')
+          updateDependency({
+            github, 
+            context, 
+            title: '[AUTOMATED-PR] Update imslib.min.js dependency', 
+            path: 'https://auth.services.adobe.com/imslib/imslib.min.js',
+            branch: 'update-imslib',
+            scriptPath: './libs/deps/imslib.min.js'
+          })
+    - name: Update forms2 and create PR if needed
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+      with:
+        script: |
+          const updateDependency = require('./.github/workflows/update-script.js')
+          updateDependency({
+            github, 
+            context, 
+            title: '[AUTOMATED-PR] Update forms2.min.js dependency', 
+            path: 'https://engage.adobe.com/js/forms2/js/forms2.min.js',
+            branch: 'update-forms2',
+            scriptPath: './libs/deps/forms2.min.js'
+          })
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

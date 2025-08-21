@@ -1,9 +1,10 @@
-function getRichResultsForNewsArticle(getMetadata) {
+function getRichResultsForArticle(type, getMetadata) {
   return {
     '@context': 'https://schema.org',
-    '@type': 'NewsArticle',
+    '@type': type,
     headLine: getMetadata('og:title'),
     image: getMetadata('og:image'),
+    description: getMetadata('description'),
     datePublished: getMetadata('published'),
     dateModified: getMetadata('modified'),
     author: {
@@ -33,12 +34,24 @@ function getRichResultsForSiteSearchBox(getMetadata) {
   };
 }
 
+function getRichResultsForOrgLogo(getMetadata) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    url: getMetadata('orgurl'),
+    logo: getMetadata('orglogo'),
+  };
+}
+
 function getRichResults(type, getMetadata) {
   switch (type) {
+    case 'Article':
     case 'NewsArticle':
-      return getRichResultsForNewsArticle(getMetadata);
+      return getRichResultsForArticle(type, getMetadata);
     case 'SiteSearchBox':
       return getRichResultsForSiteSearchBox(getMetadata);
+    case 'Organization':
+      return getRichResultsForOrgLogo(getMetadata);
     default:
       // eslint-disable-next-line no-console
       console.error(`Type ${type} is not supported`);

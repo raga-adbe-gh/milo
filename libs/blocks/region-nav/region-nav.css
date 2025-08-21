@@ -48,11 +48,20 @@
 .region-nav ul {
   list-style: none;
   padding-left: 0;
+  padding-right: 0;
   margin: 0;
 }
 
 .region-nav > div:nth-of-type(2) {
   column-count: 1;
+}
+
+.region-nav.hide {
+  display: none;
+}
+
+.dialog-modal .region-nav a {
+  text-decoration: none;
 }
 
 @media (min-width: 600px) {

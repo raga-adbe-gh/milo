@@ -100,10 +100,15 @@ function getDecoratedGLaaSConfig(config, decoratedLocales, workflowsConfig) {
   };
 }
 
-function getSharepointConfig(config) {
+function getSharepointConfig(config, fgColor) {
   const sharepointConfig = config.sp.data[0];
+  const { driveId } = sharepointConfig;
+  const drive = driveId ? `/drives/${driveId}` : '/drive';
+
   // ${sharepointConfig.site} - MS Graph API Url with site pointers.
-  const baseURI = `${sharepointConfig.site}/drive/root:${sharepointConfig.rootFolders}`;
+  const baseURI = `${sharepointConfig.site}${drive}/root:${sharepointConfig.rootFolders}`;
+  const fgBaseURI = `${sharepointConfig.site}${drive}/root:${sharepointConfig.fgRootFolder}`.replace('<fgColor>', `${fgColor}`);
+  const baseItemsURI = `${sharepointConfig.site}${drive}/items`;
   return {
     ...sharepointConfig,
     clientApp: {
@@ -114,31 +119,38 @@ function getSharepointConfig(config) {
       cache: { cacheLocation: 'sessionStorage' },
     },
     shareUrl: sharepointConfig.shareurl,
+    fgShareUrl: `${sharepointConfig.fgShareUrl}`.replace('<fgColor>', `${fgColor}`),
+    fgRootFolder: `${sharepointConfig.fgRootFolder}`.replace('<fgColor>', `${fgColor}`),
     login: { redirectUri: '/tools/loc/spauth' },
     api: {
       url: GRAPH_API,
       file: {
-        get: { baseURI },
+        get: { baseURI, fgBaseURI },
         download: { baseURI: `${sharepointConfig.site}/drive/items` },
         upload: {
           baseURI,
+          fgBaseURI,
           method: 'PUT',
         },
         delete: {
           baseURI,
+          fgBaseURI,
           method: 'DELETE',
         },
         update: {
           baseURI,
+          fgBaseURI,
           method: 'PATCH',
         },
         createUploadSession: {
           baseURI,
+          fgBaseURI,
           method: 'POST',
           payload: { '@microsoft.graph.conflictBehavior': 'replace' },
         },
         copy: {
           baseURI,
+          fgBaseURI,
           method: 'POST',
           payload: { '@microsoft.graph.conflictBehavior': 'replace' },
         },
@@ -146,13 +158,15 @@ function getSharepointConfig(config) {
       directory: {
         create: {
           baseURI,
+          fgBaseURI,
           method: 'PATCH',
           payload: { folder: {} },
         },
       },
       excel: {
+        get: { baseItemsURI },
         update: {
-          baseURI,
+          baseItemsURI,
           method: 'POST',
         },
       },
@@ -174,29 +188,35 @@ function getHelixAdminConfig() {
 async function getConfig() {
   if (!decoratedConfig) {
     const urlInfo = getUrlInfo();
-    if (urlInfo.isValid()) {
-      const configPath = `${urlInfo.origin}${LOC_CONFIG}`;
-      const configJson = await fetchConfigJson(configPath);
-      const locales = getLocalesConfig(configJson);
-      const decoratedLocales = getDecoratedLocalesConfig(locales);
-      const workflowsConfig = getWorkflowsConfig(configJson);
-      decoratedConfig = {
-        locales,
-        decoratedLocales,
-        glaas: getDecoratedGLaaSConfig(configJson, decoratedLocales, workflowsConfig),
-        sp: getSharepointConfig(configJson),
-        admin: getHelixAdminConfig(),
-        getLivecopiesForLanguage(language) {
-          const localeConfig = decoratedLocales[language];
-          return localeConfig?.livecopies ? localeConfig.livecopies : null;
-        },
-        getWorkflowForLanguage(language, customWorkflow) {
-          return getWorkflowForLanguage(workflowsConfig, language, decoratedLocales, customWorkflow);
-        },
-      };
+    if (!urlInfo.isValid()) {
+      throw new Error('Invalid Url Parameters that point to project file');
     }
+    const configPath = `${urlInfo.origin}${LOC_CONFIG}`;
+    const configJson = await fetchConfigJson(configPath);
+    const locales = getLocalesConfig(configJson);
+    const decoratedLocales = getDecoratedLocalesConfig(locales);
+    const workflowsConfig = getWorkflowsConfig(configJson);
+    decoratedConfig = {
+      locales,
+      decoratedLocales,
+      glaas: getDecoratedGLaaSConfig(configJson, decoratedLocales, workflowsConfig),
+      sp: getSharepointConfig(configJson),
+      admin: getHelixAdminConfig(),
+      getLivecopiesForLanguage(language) {
+        const localeConfig = decoratedLocales[language];
+        return localeConfig?.livecopies ? localeConfig.livecopies : null;
+      },
+      getWorkflowForLanguage(language, customWorkflow) {
+        return getWorkflowForLanguage(workflowsConfig, language, decoratedLocales, customWorkflow);
+      },
+    };
   }
   return decoratedConfig;
 }
 
-export default getConfig;
+export {
+  getConfig,
+  fetchConfigJson,
+  getSharepointConfig,
+  getHelixAdminConfig,
+};

@@ -1,41 +1,291 @@
+/* eslint-disable compat/compat */
 /* eslint-disable no-underscore-dangle */
-import { loadScript, loadStyle } from '../../utils/utils.js';
+import {
+  getConfig as pageConfigHelper,
+  getMetadata,
+  loadScript,
+  loadStyle,
+  localizeLink,
+} from '../../utils/utils.js';
+import { fetchWithTimeout } from '../utils/utils.js';
+import getUuid from '../../utils/getUuid.js';
 
-const URL_ENCODED_COMMA = '%2C';
-
-const fetchWithTimeout = async (resource, options = {}) => {
-  const { timeout = 5000 } = options;
-
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  const response = await fetch(resource, {
-    ...options,
-    signal: controller.signal,
-  });
-  clearTimeout(id);
-  return response;
+export const LANGS = {
+  en: 'en',
+  de: 'de',
+  fr: 'fr',
+  'fr-ca': 'fr-ca',
+  ja: 'ja',
+  ar: 'ar',
+  bg: 'bg',
+  cs: 'cs',
+  da: 'da',
+  es: 'es',
+  et: 'et',
+  fi: 'fi',
+  he: 'he',
+  hu: 'hu',
+  it: 'it',
+  ko: 'ko',
+  lt: 'lt',
+  lv: 'lv',
+  nl: 'nl',
+  no: 'no',
+  pl: 'pl',
+  pt: 'pt',
+  ro: 'ro',
+  ru: 'ru',
+  sk: 'sk',
+  sl: 'sl',
+  sv: 'sv',
+  tr: 'tr',
+  uk: 'uk',
+  'zh-hant': 'zh-hant',
+  th: 'th',
+  fil: 'fil',
+  id: 'id',
+  ms: 'ms',
+  vi: 'vi',
+  hi: 'hi',
+  el: 'el',
+  '': 'en',
 };
 
-export const loadStrings = async (url) => {
-  // TODO: Loc based loading
+export const LOCALES = {
+  // Americas
+  ar: { ietf: 'es-AR' },
+  br: { ietf: 'pt-BR' },
+  ca: { ietf: 'en-CA' },
+  ca_fr: { ietf: 'fr-CA' },
+  cl: { ietf: 'es-CL' },
+  co: { ietf: 'es-CO' },
+  cr: { ietf: 'es-CR' },
+  ec: { ietf: 'es-EC' },
+  el: { ietf: 'es-EL' },
+  gt: { ietf: 'es-GT' },
+  la: { ietf: 'es-LA' },
+  mx: { ietf: 'es-MX' },
+  pe: { ietf: 'es-PE' },
+  pr: { ietf: 'es-PR' },
+  '': { ietf: 'en-US' },
+  langstore: { ietf: 'en-US' },
+  // EMEA
+  africa: { ietf: 'en-africa' },
+  gb: { ietf: 'xx-gb' },
+  be_fr: { ietf: 'fr-BE' },
+  be_en: { ietf: 'en-BE' },
+  be_nl: { ietf: 'nl-BE' },
+  be: { ietf: 'xx-be' },
+  cy_en: { ietf: 'en-CY' },
+  cy: { ietf: 'xx-cy' },
+  dk: { ietf: 'da-DK' },
+  de: { ietf: 'de-DE' },
+  ee: { ietf: 'et-EE' },
+  eg_ar: { ietf: 'ar-EG' },
+  eg_en: { ietf: 'en-GB' },
+  eg: { ietf: 'xx-eg' },
+  es: { ietf: 'es-ES' },
+  fr: { ietf: 'fr-FR' },
+  gr_en: { ietf: 'en-GR' },
+  gr_el: { ietf: 'el-GR' },
+  gr: { ietf: 'xx-gr' },
+  ie: { ietf: 'en-IE' },
+  il_en: { ietf: 'en-IL' },
+  il_he: { ietf: 'he-il' },
+  il: { ietf: 'xx-il' },
+  it: { ietf: 'it-IT' },
+  kw_ar: { ietf: 'ar-KW' },
+  kw_en: { ietf: 'en-GB' },
+  kw: { ietf: 'xx-kw' },
+  lv: { ietf: 'lv-LV' },
+  lt: { ietf: 'lt-LT' },
+  lu_de: { ietf: 'de-LU' },
+  lu_en: { ietf: 'en-LU' },
+  lu_fr: { ietf: 'fr-LU' },
+  lu: { ietf: 'xx-lu' },
+  hu: { ietf: 'hu-HU' },
+  mt: { ietf: 'en-MT' },
+  mena_en: { ietf: 'en-mena' },
+  mena_ar: { ietf: 'ar-mena' },
+  mena: { ietf: 'xx-mena' },
+  ng: { ietf: 'en-NG' },
+  nl: { ietf: 'nl-NL' },
+  no: { ietf: 'no-NO' },
+  pl: { ietf: 'pl-PL' },
+  pt: { ietf: 'pt-PT' },
+  qa_ar: { ietf: 'ar-QA' },
+  qa_en: { ietf: 'en-GB' },
+  qa: { ietf: 'xx-qa' },
+  ro: { ietf: 'ro-RO' },
+  sa_en: { ietf: 'en-sa' },
+  ch_fr: { ietf: 'fr-CH' },
+  ch_de: { ietf: 'de-CH' },
+  ch_it: { ietf: 'it-CH' },
+  ch: { ietf: 'xx-ch' },
+  si: { ietf: 'sl-SI' },
+  sk: { ietf: 'sk-SK' },
+  fi: { ietf: 'fi-FI' },
+  se: { ietf: 'sv-SE' },
+  tr: { ietf: 'tr-TR' },
+  ae_en: { ietf: 'en-ae' },
+  uk: { ietf: 'en-GB' },
+  at: { ietf: 'de-AT' },
+  cz: { ietf: 'cs-CZ' },
+  bg: { ietf: 'bg-BG' },
+  ru: { ietf: 'ru-RU' },
+  cis: { ietf: 'xx-cis' },
+  ua: { ietf: 'uk-UA' },
+  ae_ar: { ietf: 'ar-ae' },
+  ae: { ietf: 'xx-ae' },
+  sa_ar: { ietf: 'ar-sa' },
+  sa: { ietf: 'xx-sa' },
+  za: { ietf: 'en-ZA' },
+  // Asia Pacific
+  apac: { ietf: 'xx-apac' },
+  hk: { ietf: 'xx-hk' },
+  au: { ietf: 'en-AU' },
+  hk_en: { ietf: 'en-HK' },
+  in: { ietf: 'en-in' },
+  id_id: { ietf: 'id-id' },
+  id_en: { ietf: 'en-id' },
+  id: { ietf: 'xx-id' },
+  my_ms: { ietf: 'ms-my' },
+  my_en: { ietf: 'en-my' },
+  my: { ietf: 'xx-my' },
+  nz: { ietf: 'en-nz' },
+  ph_en: { ietf: 'en-ph' },
+  ph_fil: { ietf: 'fil-PH' },
+  ph: { ietf: 'xx-ph' },
+  sg: { ietf: 'en-SG' },
+  th_en: { ietf: 'en-th' },
+  in_hi: { ietf: 'hi-in' },
+  th_th: { ietf: 'th-th' },
+  th: { ietf: 'xx-th' },
+  cn: { ietf: 'zh-CN' },
+  hk_zh: { ietf: 'zh-HK' },
+  tw: { ietf: 'zh-TW' },
+  jp: { ietf: 'ja-JP' },
+  kr: { ietf: 'ko-KR' },
+  vn_en: { ietf: 'en-vn' },
+  vn_vi: { ietf: 'vi-VN' },
+  vn: { ietf: 'xx-vn' },
+  sea: { ietf: 'xx-sea' },
+};
+
+const URL_ENCODED_COMMA = '%2C';
+export const fgHeaderName = 'X-Adobe-Floodgate';
+export const fgHeaderValue = 'pink';
+
+const pageConfig = pageConfigHelper();
+const pageLocales = Object.keys(pageConfig.locales || {});
+const requestHeaders = [];
+
+export function getPageLocale(currentPath, locales = pageLocales) {
+  const possibleLocale = currentPath.split('/')[1];
+  if (locales.includes(possibleLocale)) {
+    return possibleLocale;
+  }
+  // defaults to en_US
+  return '';
+}
+
+export const isValidUuid = (id) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+
+export const loadStrings = async (
+  url,
+  pathname = window.location.pathname,
+  locales = pageLocales,
+) => {
   if (!url) return {};
-  const resp = await fetch(url);
-  if (!resp.ok) return {};
-  const json = await resp.json();
-  const convertToObj = (data) => data.reduce((obj, { key, val }) => {
-    obj[key] = val;
-    return obj;
-  }, {});
-  return convertToObj(json.data);
+  try {
+    const locale = getPageLocale(pathname, locales);
+    const localizedURL = new URL(url);
+    if (localizedURL.hostname.includes('.hlx.')) {
+      localizedURL.hostname = localizedURL.hostname.replace('.hlx.', '.aem.');
+    }
+    if (localizedURL.hostname.endsWith('.page')) {
+      localizedURL.hostname = localizedURL.hostname.replace(/.page$/, '.live');
+    }
+    if (locale) {
+      localizedURL.pathname = `${locale}${localizedURL.pathname}`;
+    }
+    let resp = await fetch(`${localizedURL}.plain.html`);
+    if (!resp.ok) {
+      resp = await fetch(`${url}.plain.html`);
+    }
+    if (!resp.ok) {
+      return {};
+    }
+    const html = await resp.text();
+    const parser = new DOMParser();
+    const document = parser.parseFromString(html, 'text/html');
+    const nodes = document.querySelectorAll('.string-mappings > div');
+    return [...nodes].reduce((ans, parent) => {
+      const children = parent.querySelectorAll('div');
+      const key = children[0]?.innerText;
+      const val = children[1]?.innerHTML;
+      if (key) {
+        ans[key] = val || '';
+      }
+      return ans;
+    }, {});
+  } catch (err) {
+    return {};
+  }
+};
+
+export const decodeCompressedString = async (txt) => {
+  if (!window.DecompressionStream) {
+    await import('../../deps/compression-streams-pollyfill.js');
+  }
+  const b64decode = (str) => {
+    const binaryStr = window.atob(str);
+    const bytes = new Uint8Array(new ArrayBuffer(binaryStr.length));
+    binaryStr?.split('')
+      .forEach((c, i) => (bytes[i] = c.charCodeAt(0)));
+    return bytes;
+  };
+
+  const b64toStream = (b64) => new Blob([b64decode(b64)], { type: 'text/plain' }).stream();
+
+  const decompressStream = async (stream) => new Response(
+    // eslint-disable-next-line no-undef
+    stream.pipeThrough(new DecompressionStream('gzip')),
+  );
+
+  const responseToJSON = async (response) => {
+    const blob = await response.blob();
+    return JSON.parse(await blob.text());
+  };
+
+  const stream = b64toStream(txt);
+  const resp = await decompressStream(stream);
+  return responseToJSON(resp);
 };
 
 export const loadCaasFiles = async () => {
-  const version = new URL(document.location.href)?.searchParams?.get('caasver') || 'latest';
+  const searchParams = new URLSearchParams(document.location.search);
+  const version = searchParams?.get('caasver') || 'stable';
+  let cssFile = `https://www.adobe.com/special/chimera/caas-libs/${version}/app.css`;
+  let jsFile = `https://www.adobe.com/special/chimera/caas-libs/${version}/main.min.js`;
 
-  loadStyle(`https://www.adobe.com/special/chimera/${version}/dist/dexter/app.min.css`);
-  await loadScript(`https://www.adobe.com/special/chimera/${version}/dist/dexter/react.umd.js`);
-  await loadScript(`https://www.adobe.com/special/chimera/${version}/dist/dexter/react.dom.umd.js`);
-  await loadScript(`https://www.adobe.com/special/chimera/${version}/dist/dexter/app.min.js`);
+  // for caas local development
+  const host = searchParams?.get('caashost');
+  if (host) {
+    cssFile = `http://${host}.corp.adobe.com:5000/dist/app.css`;
+    jsFile = `http://${host}.corp.adobe.com:5000/dist/main.js`;
+  }
+
+  // for caas alpha releases
+  if (version === 'alpha') {
+    cssFile = 'https://adobecom.github.io/caas/dist/app.css';
+    jsFile = 'https://adobecom.github.io/caas/dist/main.source.js';
+  }
+
+  loadStyle(cssFile);
+  await loadScript(`https://www.adobe.com/special/chimera/caas-libs/${version}/react.umd.js`);
+  await loadScript(`https://www.adobe.com/special/chimera/caas-libs/${version}/react.dom.umd.js`);
+  await loadScript(jsFile);
 };
 
 export const loadCaasTags = async (tagsUrl) => {
@@ -84,7 +334,7 @@ const getContentIdStr = (cardStr, card) => {
 
 const wrapInParens = (s) => `(${s})`;
 
-const buildComplexQuery = (andLogicTags, orLogicTags) => {
+const buildComplexQuery = (andLogicTags, orLogicTags, notLogicTags) => {
   let andQuery = andLogicTags
     .filter((tag) => tag.intraTagLogic !== '' && tag.andTags.length)
     .map((tag) => wrapInParens(tag.andTags.map((val) => `"${val}"`).join(`+${tag.intraTagLogic}+`)))
@@ -95,18 +345,29 @@ const buildComplexQuery = (andLogicTags, orLogicTags) => {
     .map((tag) => wrapInParens(tag.orTags.map((val) => `"${val}"`).join('+AND+')))
     .join('+OR+');
 
+  let notQuery = notLogicTags
+    .filter((tag) => tag.intraTagLogicExclude !== '' && tag.notTags.length)
+    .map((tag) => wrapInParens(tag.notTags.map((val) => `"${val}"`).join(`+${tag.intraTagLogicExclude}+`)))
+    .join('+AND+');
+
   andQuery = andQuery.length ? wrapInParens(andQuery) : '';
   orQuery = orQuery.length ? wrapInParens(orQuery) : '';
+  notQuery = notQuery.length ? wrapInParens(notQuery) : '';
 
-  return encodeURIComponent(`${andQuery}${andQuery && orQuery ? '+AND+' : ''}${orQuery}`);
+  return (andQuery || orQuery)
+    ? encodeURIComponent(`${andQuery}${
+      andQuery && orQuery ? '+AND+' : ''}${orQuery}${
+      (andQuery || orQuery) && notQuery ? '+AND+NOT+' : ''}${notQuery}`)
+    : '';
 };
 
 const getSortOptions = (state, strs) => {
   const sortVals = {
     featured: 'Featured',
-    dateAsc: 'Date: (Oldest to Newest)',
     dateDesc: 'Date: (Newest to Oldest)',
-    dateModified: 'Date: (Last Modified)',
+    dateAsc: 'Date: (Oldest to Newest)',
+    modifiedDesc: 'Modified Date: (Newest to Oldest)',
+    modifiedAsc: 'Modified Date: (Oldest to Newest)',
     eventSort: 'Events: (Live, Upcoming, OnDemand)',
     titleAsc: 'Title A-Z',
     titleDesc: 'Title Z-A',
@@ -146,19 +407,28 @@ const alphaSort = (a, b) => {
   return 0;
 };
 
-const getFilterObj = ({ excludeTags, filterTag, icon, openedOnLoad }, tags, state) => {
+const getLocalTitle = (tag, country, lang) => tag[`title.${lang}_${country}`]
+  || tag[`title.${lang}`]
+  || tag.title;
+
+const getFilterObj = (
+  { excludeTags, filterTag, icon, openedOnLoad },
+  tags,
+  state,
+  country,
+  lang,
+) => {
   if (!filterTag?.[0]) return null;
   const tagId = filterTag[0];
   const tag = findTagById(tagId, tags);
   if (!tag) return null;
   const items = Object.values(tag.tags)
     .map((itemTag) => {
-      if (excludeTags.includes(itemTag.tagID)) return null;
-      const lang = state.language.split('/')[1];
-      const label = itemTag[`title.${lang}`] ? itemTag[`title.${lang}`] : itemTag.title;
+      if (excludeTags?.includes(itemTag.tagID)) return null;
+      const titleLabel = getLocalTitle(itemTag, country, lang);
       return {
         id: itemTag.tagID,
-        label: label.replace('&amp;', '&'),
+        label: titleLabel.replace('&amp;', '&'),
       };
     })
     .filter((i) => i !== null)
@@ -168,7 +438,7 @@ const getFilterObj = ({ excludeTags, filterTag, icon, openedOnLoad }, tags, stat
     id: tagId,
     openedOnLoad: !!openedOnLoad,
     items,
-    group: tag.title,
+    group: getLocalTitle(tag, country, lang),
   };
 
   if (icon) {
@@ -178,24 +448,143 @@ const getFilterObj = ({ excludeTags, filterTag, icon, openedOnLoad }, tags, stat
   return filterObj;
 };
 
-const getFilterArray = async (state) => {
-  if (!state.showFilters || state.filters.length === 0) {
+const getCustomFilterObj = ({ group, filtersCustomItems, openedOnLoad }, strs = {}) => {
+  if (!group) return null;
+
+  const IN_BRACKETS_RE = /^{.*}$/;
+
+  const items = filtersCustomItems.map((item) => ({
+    id: item.customFilterTag[0],
+    label: item.filtersCustomLabel?.match(IN_BRACKETS_RE)
+      ? strs[item.filtersCustomLabel.replace(/{|}/g, '')]
+      : item.filtersCustomLabel || '',
+  }));
+
+  const filterObj = {
+    id: group,
+    openedOnLoad: !!openedOnLoad,
+    items,
+    group: group?.match(IN_BRACKETS_RE)
+      ? strs[group.replace(/{|}/g, '')]
+      : group || '',
+  };
+
+  return filterObj;
+};
+
+const getCategoryArray = async (state, country, lang) => {
+  const { tags } = await getTags(state.tagsUrl);
+  const categories = Object.values(tags)
+    .filter((tag) => tag.tagID === 'caas:product-categories')
+    .map((tag) => tag.tags);
+
+  const categoryItems = Object.entries(categories[0])
+    .map(([key, value]) => ({
+      group: key,
+      id: value.tagID,
+      title: value.title,
+      icon: value.icon || '',
+      items: Object.entries(value.tags)
+        .map((tag) => getFilterObj({ excludeTags: [], filterTag: [tag[1].tagID], icon: '', openedOnLoad: false }, tags, state, country, lang))
+        .filter((tag) => tag !== null),
+    }));
+
+  return [{ group: 'All Topics', title: 'All Topics', id: '', items: [] }, ...categoryItems];
+};
+
+const getFilterArray = async (state, country, lang, strs) => {
+  if ((!state.showFilters || state.filters.length === 0) && state.filtersCustom?.length === 0) {
     return [];
   }
 
   const { tags } = await getTags(state.tagsUrl);
-  const filters = state.filters
-    .map((filter) => getFilterObj(filter, tags, state))
-    .filter((filter) => filter !== null);
+  const useCustomFilters = state.filterBuildPanel === 'custom';
+
+  let filters = [];
+  if (!useCustomFilters) {
+    filters = state.filters
+      .map((filter) => getFilterObj(filter, tags, state, country, lang))
+      .filter((filter) => filter !== null);
+  } else {
+    filters = state.filtersCustom.length > 0
+      ? state.filtersCustom.map((filter) => getCustomFilterObj(filter, strs))
+      : [];
+  }
+
   return filters;
 };
 
-export function arrayToObj (input=[]) {
+export function getCountryAndLang({ autoCountryLang, country, language }) {
+  const locales = getMetadata('caas-locales') || '';
+  const langFirst = getMetadata('langfirst');
+  /* if it is a language first localized page don't use the milo locales.
+    This can be changed after lang-first localization is supported from the milo utils */
+  if (langFirst && autoCountryLang) {
+    const pathArr = pageConfigHelper()?.pathname?.split('/') || [];
+    const langStr = LANGS[pathArr[1]] ?? LANGS[''] ?? 'en';
+    let countryStr = LOCALES[pathArr[2]] ?? 'xx';
+    if (typeof countryStr === 'object') {
+      countryStr = countryStr.ietf?.split('-')[1] ?? 'xx';
+    }
+
+    return {
+      country: countryStr,
+      language: langStr,
+      locales,
+    };
+  }
+  if (autoCountryLang) {
+    const prefix = pageConfigHelper()?.locale?.prefix?.replace('/', '') || '';
+    const locale = LOCALES[prefix]?.ietf || 'en-US';
+    /* eslint-disable-next-line prefer-const */
+    let [currLang, currCountry] = locale.split('-');
+
+    return {
+      country: currCountry,
+      language: currLang,
+      locales,
+    };
+  }
+  return {
+    country: country ? country.split('/').pop() : 'US',
+    language: language ? language.split('/').pop() : 'en',
+    locales,
+  };
+}
+
+/**
+ * Finds the matching tuple and returns its index.
+ * Looks for 'X-Adobe-Floodgate' in [['X-Adobe-Floodgate', 'pink'], ['a','b']]
+ * @param {*} fgHeader fgHeader
+ * @returns tupleIndex
+ */
+const findTupleIndex = (fgHeader) => {
+  const matchingTupleIndex = requestHeaders.findIndex((element) => element[0] === fgHeader);
+  return matchingTupleIndex;
+};
+
+/**
+ * Adds the floodgate header to the Config of ConsonantCardCollection
+ * headers: [['X-Adobe-Floodgate', 'pink'], ['OtherHeader', 'Value']]
+ * @param {*} state state
+ * @returns requestHeaders
+ */
+const addFloodgateHeader = (state) => {
+  // Delete FG header if already exists, before adding pink to avoid duplicates in requestHeaders
+  requestHeaders.splice(findTupleIndex(fgHeaderName, 1));
+  if (state.fetchCardsFromFloodgateTree) {
+    requestHeaders.push([fgHeaderName, fgHeaderValue]);
+  }
+  return requestHeaders;
+};
+
+export function arrayToObj(input = []) {
   const obj = {};
-  if(!Array.isArray(input)){
+  if (!Array.isArray(input)) {
+    // eslint-disable-next-line no-param-reassign
     input = [];
   }
-  input.forEach(item => {
+  input.forEach((item) => {
     if (item.key && item.value) {
       obj[item.key] = item.value;
     }
@@ -203,19 +592,120 @@ export function arrayToObj (input=[]) {
   return obj;
 }
 
-export const getConfig = async (state, strs = {}) => {
+const addMissingStateProps = (state) => {
+  // eslint-disable-next-line no-use-before-define
+  Object.entries(defaultState).forEach(([key, val]) => {
+    if (state[key] === undefined) {
+      state[key] = val;
+    }
+  });
+  return state;
+};
+
+const fetchUuidForCard = async (card) => {
+  if (!card.contentId) {
+    return null;
+  }
+  if (isValidUuid(card.contentId)) {
+    return card.contentId;
+  }
+  try {
+    const url = new URL(card.contentId);
+    const localizedLink = localizeLink(url, null, true);
+    const substr = String(localizedLink).split('https://').pop();
+    return await getUuid(substr);
+  } catch (error) {
+    return null;
+  }
+};
+
+const getCardsString = async (cards = []) => {
+  const uuids = await Promise.all(cards.map(async (card) => {
+    const uuid = await fetchUuidForCard(card);
+    return uuid !== null ? uuid : undefined;
+  }));
+  return uuids.filter(Boolean).join('%2C');
+};
+
+export const stageMapToCaasTransforms = (config) => {
+  if (config.env?.name === 'prod' || !config.stageDomainsMap) return {};
+  const { href, hostname } = window.location;
+  const matchedRules = Object.entries(config.stageDomainsMap)
+    .find(([domain]) => new RegExp(domain).test(href));
+  if (!matchedRules) return {};
+  const [, domainsMap] = matchedRules;
+  return {
+    enabled: true,
+    hostnameTransforms: Object.keys(domainsMap).map((d) => ({
+      from: d,
+      to: domainsMap[d] === 'origin' ? `${d.includes('https') ? 'https://' : ''}${hostname}` : domainsMap[d],
+    })),
+  };
+};
+
+/**
+ * Extracts the graybox experience ID from the current URL
+ * Supports formats:
+ * - https://[exn].[pn]-graybox.adobe.com/[path].html
+ * - https://stage--[pn]-graybox–adobecom.aem.page/[exn]/[path]
+ * @param {string} [hostname] - Optional hostname, defaults to window.location.hostname
+ * @param {string} [pathname] - Optional pathname, defaults to window.location.pathname
+ * @returns {string|null} The experience ID or null if not found
+ */
+export const getGrayboxExperienceId = (
+  hostname = window.location?.hostname || '',
+  pathname = window.location?.pathname || '',
+) => {
+  // Only allow trusted Adobe graybox domains
+  const isAdobeGraybox = /^[^.]+\.([a-z]+-)?graybox\.adobe\.com$/.test(hostname);
+  const isStageGraybox = (
+    (hostname.endsWith('.aem.page') || hostname.endsWith('.aem.live'))
+    && hostname.includes('graybox')
+  );
+
+  // Check for graybox.adobe.com format: https://[exn].[pn]-graybox.adobe.com/[path].html
+  if (isAdobeGraybox) {
+    const parts = hostname.split('.');
+    if (parts.length >= 3 && parts[1].includes('-graybox')) {
+      return parts[0]; // Return the experience ID (first part)
+    }
+  }
+
+  // Check for stage format: https://stage--[pn]-graybox–adobecom.aem.page/[exn]/[path]
+  if (isStageGraybox) {
+    const pathParts = pathname.split('/').filter(Boolean);
+    if (pathParts.length > 0) {
+      return pathParts[0]; // Return the experience ID (first path segment)
+    }
+  }
+
+  return null;
+};
+
+export const getConfig = async (originalState, strs = {}) => {
+  const state = addMissingStateProps(originalState);
   const originSelection = Array.isArray(state.source) ? state.source.join(',') : state.source;
-  const language = state.language ? state.language.split('/').pop() : 'en';
-  const country = state.country ? state.country.split('/').pop() : 'us';
-  const featuredCards = state.featuredCards && state.featuredCards.reduce(getContentIdStr, '');
+  const { country, language, locales } = getCountryAndLang(state);
+  const featuredCards = state.featuredCards ? await getCardsString(state.featuredCards) : '';
   const excludedCards = state.excludedCards && state.excludedCards.reduce(getContentIdStr, '');
+  const hideCtaIds = state.hideCtaIds ? state.hideCtaIds.reduce(getContentIdStr, '') : '';
+  const hideCtaTags = state.hideCtaTags ? state.hideCtaTags : [];
   const targetActivity = state.targetEnabled
   && state.targetActivity ? `/${encodeURIComponent(state.targetActivity)}.json` : '';
   const flatFile = targetActivity ? '&flatFile=false' : '';
+  const localesQueryParam = locales ? `&locales=${locales}` : '';
+  const debug = (state.showIds && document.location.pathname.includes('/tools/caas'))
+    || state.container === 'categories'
+    ? '&debug=true' : '';
   const collectionTags = state.includeTags ? state.includeTags.join(',') : '';
   const excludeContentWithTags = state.excludeTags ? state.excludeTags.join(',') : '';
 
-  const complexQuery = buildComplexQuery(state.andLogicTags, state.orLogicTags);
+  const complexQuery = buildComplexQuery(state.andLogicTags, state.orLogicTags, state.notLogicTags);
+
+  const caasRequestHeaders = addFloodgateHeader(state);
+
+  const grayboxExperienceId = getGrayboxExperienceId();
+  const grayboxExperienceParam = grayboxExperienceId ? `&gbExperienceID=${grayboxExperienceId}` : '';
 
   const config = {
     collection: {
@@ -227,30 +717,55 @@ export const getConfig = async (state, strs = {}) => {
       },
       button: { style: state.collectionBtnStyle },
       resultsPerPage: state.resultsPerPage,
-      endpoint: `https://${
-        state.endpoint
-      }${targetActivity}?originSelection=${originSelection}&contentTypeTags=${state.contentTypeTags.join(
-        ',',
-      )}&collectionTags=${collectionTags}&excludeContentWithTags=${excludeContentWithTags}&language=${language}&country=${country}&complexQuery=${complexQuery}&excludeIds=${excludedCards}&currentEntityId=&featuredCards=${featuredCards}&environment=&draft=${
-        state.draftDb
-      }&size=${state.collectionSize || state.totalCardsToShow}${flatFile}`,
+      endpoint: `https://${state.endpoint
+      }${targetActivity
+      }?originSelection=${originSelection
+      }&contentTypeTags=${state.contentTypeTags.join().toLowerCase()
+      }&secondSource=${state.showSecondarySource ? state.secondarySource.join(',') : []
+      }&secondaryTags=${state.showSecondarySource ? state.secondaryTags.join(',').toLowerCase() : []
+      }&collectionTags=${collectionTags.toLowerCase()
+      }&excludeContentWithTags=${excludeContentWithTags.toLowerCase()
+      }&language=${language
+      }&country=${country
+      }&complexQuery=${complexQuery
+      }&excludeIds=${excludedCards
+      }&currentEntityId=&featuredCards=${featuredCards
+      }&environment=&draft=${state.draftDb
+      }&size=${state.collectionSize || state.totalCardsToShow
+      }${localesQueryParam
+      }${debug
+      }${flatFile
+      }${grayboxExperienceParam}`,
       fallbackEndpoint: state.fallbackEndpoint,
       totalCardsToShow: state.totalCardsToShow,
+      showCardBadges: state.showCardBadges,
       cardStyle: state.cardStyle,
       showTotalResults: state.showTotalResults,
       i18n: {
         prettyDateIntervalFormat:
           strs.prettyDateIntervalFormat || '{ddd}, {LLL} {dd} | {timeRange} {timeZone}',
         totalResultsText: strs.totalResults || '{total} results',
-        title: strs.collectionTitle || '',
+        title: state.collectionTitle?.match(/^{.*}$/) ? strs[state.collectionTitle.replace(/{|}/g, '')] : state.collectionTitle || '',
         titleHeadingLevel: state.titleHeadingLevel,
         cardTitleAccessibilityLevel: state.cardTitleAccessibilityLevel,
         onErrorTitle: strs.onErrorTitle || 'Sorry there was a system error.',
         onErrorDescription: strs.onErrorDesc
           || 'Please try reloading the page or try coming back to the page another time.',
+        lastModified: strs.lastModified || 'Last modified {date}',
+        playVideo: strs.playVideo || 'Play, {cardTitle}',
+        nextCards: strs.nextCards || 'Next Cards',
+        prevCards: strs.prevCards || 'Previous Cards',
       },
+      detailsTextOption: state.detailsTextOption,
+      hideDateInterval: state.hideDateInterval,
+      dynamicCTAForLiveEvents: state.dynamicCTAForLiveEvents,
       setCardBorders: state.setCardBorders,
+      showFooterDivider: state.showFooterDivider,
       useOverlayLinks: state.useOverlayLinks,
+      partialLoadWithBackgroundFetch: {
+        enabled: state.partialLoadEnabled,
+        partialLoadCount: state.partialLoadCount,
+      },
       collectionButtonStyle: state.collectionBtnStyle,
       banner: {
         register: {
@@ -268,15 +783,27 @@ export const getConfig = async (state, strs = {}) => {
         pool: state.sortReservoirPool,
       },
       ctaAction: state.ctaAction,
+      cardHoverEffect: state.cardHoverEffect || 'default',
       additionalRequestParams: arrayToObj(state.additionalRequestParams),
+      // Only include bladeCard when explicitly configured
+      ...((state.bladeCardReverse || state.bladeCardLightText || state.bladeCardTransparent) && {
+        bladeCard: {
+          reverse: !!state.bladeCardReverse,
+          lightText: !!state.bladeCardLightText,
+          transparent: !!state.bladeCardTransparent,
+        },
+      }),
     },
+    hideCtaIds: hideCtaIds.split(URL_ENCODED_COMMA),
+    hideCtaTags,
     featuredCards: featuredCards.split(URL_ENCODED_COMMA),
     filterPanel: {
       enabled: state.showFilters,
-      eventFilter: state.filterEvent,
+      eventFilter: state.filterEvent || [],
       type: state.showFilters ? state.filterLocation : 'left',
       showEmptyFilters: state.filtersShowEmpty,
-      filters: await getFilterArray(state),
+      filters: await getFilterArray(state, country, language, strs),
+      categories: await getCategoryArray(state, country, language),
       filterLogic: state.filterLogic,
       i18n: {
         leftPanel: {
@@ -330,7 +857,7 @@ export const getConfig = async (state, strs = {}) => {
       type: state.paginationType,
       i18n: {
         loadMore: {
-          btnText: strs.pgLoadMore || 'Load More',
+          btnText: strs.pgLoadMore || 'Load more',
           resultsQuantityText: strs.pgLoadMoreResultsQty || '{start} of {end} displayed',
         },
         paginator: {
@@ -371,8 +898,8 @@ export const getConfig = async (state, strs = {}) => {
         filterInfo: { searchPlaceholderText: strs.searchPlaceholder || 'Search Here' },
       },
     },
-    language: 'en',
-    country: 'US',
+    language,
+    country,
     analytics: {
       trackImpressions: state.analyticsTrackImpression || '',
       collectionIdentifier: state.analyticsCollectionName,
@@ -382,7 +909,10 @@ export const getConfig = async (state, strs = {}) => {
       lastViewedSession: state.lastViewedSession || '',
     },
     customCard: ['card', `return \`${state.customCard}\``],
+    linkTransformer: pageConfig.caasLinkTransformer || stageMapToCaasTransforms(pageConfig),
+    headers: caasRequestHeaders,
   };
+
   return config;
 };
 
@@ -408,21 +938,25 @@ export const initCaas = async (state, caasStrs, el) => {
 
 export const defaultState = {
   additionalRequestParams: [],
+  dynamicCTAForLiveEvents: false,
   analyticsCollectionName: '',
   analyticsTrackImpression: false,
   andLogicTags: [],
+  autoCountryLang: false,
+  fetchCardsFromFloodgateTree: false,
   bookmarkIconSelect: '',
   bookmarkIconUnselect: '',
   cardStyle: 'half-height',
   cardTitleAccessibilityLevel: 6,
   collectionBtnStyle: 'primary',
   collectionName: '',
+  collectionTitle: '',
   collectionSize: '',
   container: '1200MaxWidth',
   contentTypeTags: [],
   country: 'caas:country/us',
   customCard: '',
-  ctaAction: '_blank',
+  ctaAction: '_self',
   doNotLazyLoad: false,
   disableBanners: false,
   draftDb: false,
@@ -432,30 +966,44 @@ export const defaultState = {
   excludeTags: [],
   fallbackEndpoint: '',
   featuredCards: [],
-  filterEvent: '',
+  filterEvent: [],
+  filterBuildPanel: 'automatic',
   filterLocation: 'left',
   filterLogic: 'or',
   filters: [],
+  filtersCustom: [],
   filtersShowEmpty: false,
   gutter: '4x',
+  headers: [],
+  hideCtaIds: [],
+  hideCtaTags: [],
+  hideDateInterval: false,
   includeTags: [],
   language: 'caas:language/en',
   layoutType: '4up',
   loadMoreBtnStyle: 'primary',
+  notLogicTags: [],
   onlyShowBookmarkedCards: false,
   orLogicTags: [],
   paginationAnimationStyle: 'paged',
   paginationEnabled: false,
   paginationQuantityShown: false,
-  paginationType: 'none',
+  paginationType: 'paginator',
   paginationUseTheme3: false,
+  partialLoadEnabled: false,
+  partialLoadCount: 100,
   placeholderUrl: '',
   resultsPerPage: 5,
   searchFields: [],
+  secondaryTags: [],
+  secondarySource: [],
   setCardBorders: false,
+  showCardBadges: false,
+  showFooterDivider: false,
   showBookmarksFilter: false,
   showBookmarksOnCards: false,
   showFilters: false,
+  showIds: false,
   showSearch: false,
   showTotalResults: false,
   sortDateAsc: false,
@@ -466,6 +1014,8 @@ export const defaultState = {
   sortEnableRandomSampling: false,
   sortEventSort: false,
   sortFeatured: false,
+  sortModifiedAsc: false,
+  sortModifiedDesc: false,
   sortRandom: false,
   sortReservoirPool: 1000,
   sortReservoirSample: 3,
@@ -476,6 +1026,7 @@ export const defaultState = {
   targetActivity: '',
   targetEnabled: false,
   theme: 'lightest',
+  detailsTextOption: 'default',
   titleHeadingLevel: 'h3',
   totalCardsToShow: 10,
   useLightText: false,

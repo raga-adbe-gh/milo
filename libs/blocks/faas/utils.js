@@ -1,23 +1,24 @@
-/* eslint-disable no-undef */
+/* global $ */
 
 import {
   loadStyle,
   loadScript,
   getConfig,
   createTag,
+  localizeLink,
 } from '../../utils/utils.js';
 
 const { env, miloLibs, codeRoot } = getConfig();
 let state = {};
 
 export const getFaasHostSubDomain = (environment) => {
-  const faasEnv = environment ?? env.name;
-  // TODO: prod should be updated as '' when QA is done from FAAS team.
-  if (faasEnv === 'prod') {
+  const { searchParams } = new URL(window.location.href);
+  const faasEnv = environment ?? searchParams.get('faas-env');
+  if (env.name === 'prod' || faasEnv === 'prod') {
     return '';
   }
-  if (faasEnv === 'stage') {
-    return 'dev.';
+  if (env.name === 'stage' || faasEnv === 'stage') {
+    return 'staging.';
   }
   if (faasEnv === 'dev') {
     return 'dev.';
@@ -29,12 +30,8 @@ export const getFaasHostSubDomain = (environment) => {
 };
 
 const base = miloLibs || codeRoot;
-
 export const faasHostUrl = `https://${getFaasHostSubDomain()}apps.enterprise.adobe.com`;
-let faasCurrentJS = `${faasHostUrl}/faas/service/jquery.faas-current.js`;
-if (env.name === 'local') {
-  faasCurrentJS = `${base}/deps/jquery.faas-current.js`;
-}
+const faasCurrentJS = base.includes('localhost') ? `${base}/deps/jquery.faas-current.js` : `${faasHostUrl}/faas/service/jquery.faas-current.js`;
 export const loadFaasFiles = () => {
   loadStyle(`${base}/blocks/faas/faas.css`);
   return Promise.all([
@@ -240,22 +237,48 @@ const beforeSubmitCallback = () => {
     const email = document.querySelector('.FaaS-1 input');
     const country = document.querySelector('.FaaS-14 select');
 
-    fetch('https://us-central1-adobe---aa-university.cloudfunctions.net/register', { 
+    fetch('https://us-central1-adobe---aa-university.cloudfunctions.net/register', {
       method: 'POST',
       body: JSON.stringify({
         first_name: firstName.value,
         last_name: lastName.value,
         email: email.value,
         university: 'none',
-        country: country.value
-      })
+        country: country.value,
+      }),
     })
-    .catch((error) => {
-      console.error('AA Sandbox Error:', error);
-    });
+      .catch((error) => {
+        window.lana.log(`AA Sandbox Error: ${error.reason || error.error || error.message || error}`, { tags: 'faas', errorType: 'i' });
+      });
   }
 };
 /* c8 ignore stop */
+
+export const afterSubmitCallback = (e) => {
+  const config = getConfig();
+  if (!e.success || !(config.faasCloseModalAfterSubmit === 'on')) return;
+  const faasForms = document.querySelectorAll('.dialog-modal .faas');
+  if (faasForms.length !== 1) return;
+  const faas = faasForms[0];
+  const dialogModal = faas.closest('.dialog-modal');
+  if (!dialogModal) return;
+  const closeBtn = dialogModal.querySelector('.dialog-close');
+  const faasFormWrapper = dialogModal.querySelector('.faas-form-wrapper');
+  if (!faasFormWrapper) return;
+  const overlay = createTag('div', { class: 'faas-form-confirm-overlay' });
+  const checkIcon = createTag('img', {
+    class: 'icon-milo checkmark-green',
+    src: `${config.miloLibs || config.codeRoot}/ui/img/checkmark-green.svg`,
+    alt: 'checkmark-green',
+  });
+  overlay.append(checkIcon);
+  faasFormWrapper.append(overlay);
+
+  checkIcon.addEventListener('animationend', () => {
+    if (faas.reset) faas.reset();
+    if (closeBtn) closeBtn.click();
+  }, { passive: true, once: true });
+};
 
 export const makeFaasConfig = (targetState) => {
   if (!targetState) {
@@ -268,7 +291,7 @@ export const makeFaasConfig = (targetState) => {
     hidePrepopulated: targetState.hidePrepopulated ?? false,
     id: targetState.id,
     l: targetState.l,
-    d: targetState.d,
+    d: localizeLink(targetState.d),
     as: targetState.as,
     ar: targetState.ar,
     pc: {
@@ -293,9 +316,10 @@ export const makeFaasConfig = (targetState) => {
         149: '',
       },
     },
-    e: { 
-      afterYiiLoadedCallback, 
+    e: {
+      afterYiiLoadedCallback,
       beforeSubmitCallback,
+      afterSubmitCallback,
     },
     style_backgroundTheme: targetState.style_backgroundTheme || 'white',
     style_layout: targetState.style_layout || 'column1',
@@ -321,7 +345,7 @@ export const makeFaasConfig = (targetState) => {
   if (targetState.q103) {
     Object.assign(config.q, { 103: { c: targetState.q103 } });
   }
-  
+
   return config;
 };
 
@@ -335,7 +359,8 @@ export const initFaas = (config, targetEl) => {
   ${state.style_backgroundTheme || 'white'}
   ${state.style_layout || 'column1'}
   ${state.isGate ? 'gated' : ''}
-  ${isNext ? 'next' : ''}`,
+  ${isNext ? 'next' : ''}
+  ${`faas-form-${state.id}` || ''}`,
   });
 
   const formTitleWrapperEl = createTag('div', { class: `faas-title text-${state.title_align || 'center'}` });
@@ -345,11 +370,20 @@ export const initFaas = (config, targetEl) => {
     formTitleWrapperEl.append(formTitleEl);
   }
 
+  if (window.location.pathname === '/tools/faas') {
+    state.as = false;
+    state.ar = false;
+  }
+
   const formEl = createTag('div', { class: 'faas-form-wrapper' });
   if (state.complete) {
     if (state.js) {
-        Object.keys(state.js).forEach((key) => {
-        state[key] = state.js[key];
+      Object.keys(state.js).forEach((key) => {
+        if (key === 'd') {
+          state[key] = localizeLink(state.js[key]);
+        } else {
+          state[key] = state.js[key];
+        }
       });
       delete state.js;
     }

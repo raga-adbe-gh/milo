@@ -11,13 +11,16 @@
  */
 /* eslint-disable no-use-before-define */
 
-import getConfig from './config.js';
+import { getConfig } from './config.js';
 import {
   createTag,
+  fetchProjectFile,
+  getAnchorHtml,
+  getLinkOrDisplayText,
   getPathFromUrl,
   loadingOFF,
   loadingON,
-  setStatus, simulatePreview, stripExtension,
+  setStatus, showButtons, hideButtons, simulatePreview, stripExtension,
 } from './utils.js';
 import {
   saveFile,
@@ -95,10 +98,6 @@ async function createTableWithHeaders(config) {
   await appendLanguages($tr, config, projectDetail.translationProjects);
   $table.appendChild($tr);
   return $table;
-}
-
-function getAnchorHtml(url, text) {
-  return `<a href="${url}" target="_new">${text}</a>`;
 }
 
 function getSharepointStatus(doc) {
@@ -214,27 +213,6 @@ async function rolloutAll(projectInfo) {
   if (failedRollouts.length > 0) {
     loadingON(`Rollout failed for <br/> ${failedRollouts.flat(1).join('<br/>')}`);
   }
-}
-
-function getLinkedPagePath(spShareUrl, pagePath) {
-  return getAnchorHtml(spShareUrl.replace('<relativePath>', pagePath), pagePath);
-}
-
-function getLinkOrDisplayText(spViewUrl, docStatus) {
-  const pathOrMsg = docStatus.msg;
-  return docStatus.hasSourceFile ? getLinkedPagePath(spViewUrl, pathOrMsg) : pathOrMsg;
-}
-
-function showButtons(buttonIds) {
-  buttonIds.forEach((buttonId) => {
-    document.getElementById(buttonId).classList.remove('hidden');
-  });
-}
-
-function hideButtons(buttonIds) {
-  buttonIds.forEach((buttonId) => {
-    document.getElementById(buttonId).classList.add('hidden');
-  });
 }
 
 async function displayProjectDetail() {
@@ -515,14 +493,6 @@ async function startProject() {
   }
 }
 
-async function fetchProjectFile(url, retryAttempt) {
-  const response = await fetch(url);
-  if (!response.ok && retryAttempt <= MAX_RETRIES) {
-    await fetchProjectFile(url, retryAttempt + 1);
-  }
-  return response;
-}
-
 async function reloadProjectFile() {
   const projectFile = await initProject();
   loadingON('Purging project file');
@@ -640,7 +610,11 @@ async function copyFilesToLangstoreEn() {
   const previewStatuses = await Promise.all(
     copyStatuses
       .filter((status) => status.success)
-      .map((status) => simulatePreview(stripExtension(status.dstPath))),
+      .map((status) => {
+        let { dstPath } = status;
+        dstPath = dstPath.endsWith('.xlsx') ? dstPath.replace(/\.xlsx$/, '.json') : stripExtension(dstPath);
+        return simulatePreview(dstPath);
+      }),
   );
   loadingON('Completed Preview for copied files... ');
   const failedCopies = copyStatuses
@@ -661,7 +635,7 @@ async function copyFilesToLangstoreEn() {
 
 async function triggerUpdateFragments() {
   loadingON('Fetching and updating fragments..');
-  const status = await updateFragments();
+  const status = await updateFragments(initProject);
   loadingON(status);
 }
 

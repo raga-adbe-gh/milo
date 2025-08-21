@@ -4,8 +4,36 @@
   "limit": 21,
   "data": [
     {
+      "key": "testing-cache",
+      "value": "Testing cache"
+    },
+    {
       "key": "recommended-for-you",
       "value": "Recommended for you"
+    },
+    {
+      "key": "no-results",
+      "value": "No results found"
+    },
+    {
+      "key": "phone-number",
+      "value": "800 12345 6789"
+    },
+    {
+      "key": "empty-value",
+      "value": ""
+    },
+    {
+      "key": "add-to-cart",
+      "value": "Add to cart",
+      "color": "",
+      "url": ""
+    },
+    {
+      "key": "adobe-apps",
+      "value": "Adobe Apps",
+      "color": "",
+      "url": ""
     }
   ],
   ":type": "sheet"

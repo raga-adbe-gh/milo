@@ -6,20 +6,42 @@ export const loadStyle = stub();
 
 export const loadScript = stub();
 
+export const localizeLink = (e) => e;
+
 export const utf8ToB64 = (str) => window.btoa(unescape(encodeURIComponent(str)));
+
+export const b64ToUtf8 = (str) => decodeURIComponent(escape(window.atob(str)));
+
+export const customFetch = stub();
+
+export function getMetadata(name, doc = document) {
+  const attr = name && name.includes(':') ? 'property' : 'name';
+  const meta = doc.head.querySelector(`meta[${attr}="${name}"]`);
+  return meta && meta.content;
+}
+
+export const isValidHtmlUrl = (url) => {
+  const regex = /^https:\/\/[^\s]+$/;
+  return regex.test(url);
+};
 
 export function createIntersectionObserver({ el, callback /* , once = true, options = {} */ }) {
   // fire immediately
   callback(el, { target: el });
 }
 
+const PAGE_URL = new URL(window.location.href);
+export const SLD = PAGE_URL.hostname.includes('.aem.') ? 'aem' : 'hlx';
+
 export const parseEncodedConfig = stub().returns({
   analyticsTrackImpression: false,
   analyticsCollectionName: '',
   andLogicTags: [],
+  autoCountryLang: false,
   bookmarkIconSelect: '',
   bookmarkIconUnselect: '',
   cardStyle: 'half-height',
+  cardHoverEffect: 'default',
   collectionBtnStyle: 'primary',
   collectionButtonStyle: 'primary',
   container: '1200MaxWidth',
@@ -33,6 +55,8 @@ export const parseEncodedConfig = stub().returns({
   fallbackEndpoint: '',
   featuredCards: [],
   gutter: '4x',
+  headers: [],
+  hideCtaIds: [],
   language: 'caas:language/en',
   layoutType: '4up',
   loadMoreBtnStyle: 'primary',
@@ -42,7 +66,7 @@ export const parseEncodedConfig = stub().returns({
   paginationEnabled: false,
   paginationQuantityShown: false,
   paginationUseTheme3: false,
-  paginationType: 'none',
+  paginationType: '',
   placeholderUrl: '/my/placeholder.json',
   resultsPerPage: 5,
   searchFields: [],
@@ -50,6 +74,10 @@ export const parseEncodedConfig = stub().returns({
   showBookmarksFilter: false,
   showBookmarksOnCards: false,
   showFilters: false,
+  filters: [],
+  categories: [],
+  secondarySource: '',
+  secondaryTags: [],
   showSearch: false,
   showTotalResults: false,
   sortDefault: 'dateDesc',

@@ -6,8 +6,11 @@ import {
   buildArticleCard,
 } from './article-helpers.js';
 
-import { createTag, getConfig } from '../../utils/utils.js';
+import { createTag, getConfig, createIntersectionObserver } from '../../utils/utils.js';
 import { replaceKey } from '../../features/placeholders.js';
+import { updateLinkWithLangRoot } from '../../utils/helpers.js';
+
+const ROOT_MARGIN = 50;
 
 const replacePlaceholder = async (key) => replaceKey(key, getConfig());
 
@@ -16,6 +19,8 @@ const blogIndex = {
   byPath: {},
   offset: 0,
   complete: false,
+  config: {},
+  offsetData: [],
 };
 
 /**
@@ -67,21 +72,27 @@ export function readBlockConfig(block) {
  * fetches blog article index.
  * @returns {object} index with data and path lookup
  */
-export async function fetchBlogArticleIndex() {
-  const pageSize = 500;
-
+export async function fetchBlogArticleIndex(config, limit) {
   if (blogIndex.complete) return (blogIndex);
+  const pageSize = limit || 500;
+  const { feed } = config || blogIndex.config;
+  const queryParams = `?limit=${pageSize}&offset=${blogIndex.offset}`;
+  blogIndex.offset += pageSize;
+  const defaultPath = updateLinkWithLangRoot(`${getConfig().locale.contentRoot}/query-index.json`);
+  const indexPath = feed
+    ? `${feed}${queryParams}`
+    : `${defaultPath}${queryParams}`;
 
-  return fetch(`${getConfig().locale.contentRoot}/query-index.json?limit=${pageSize}&offset=${blogIndex.offset}`)
+  return fetch(indexPath)
     .then((response) => response.json())
     .then((json) => {
-      const complete = (json.limit + json.offset) === json.total;
+      const complete = (json.limit + json.offset) >= json.total;
       json.data.forEach((post) => {
         blogIndex.data.push(post);
         blogIndex.byPath[post.path.split('.')[0]] = post;
       });
+      blogIndex.offsetData = json.data;
       blogIndex.complete = complete;
-      blogIndex.offset = json.offset + pageSize;
 
       return blogIndex;
     });
@@ -91,16 +102,6 @@ function isCardOnPage(article) {
   const path = article.path.split('.')[0];
   /* using recommended and featured articles */
   return !!document.querySelector(`.featured-article a.featured-article-card[href="${path}"], .recommended-articles a.article-card[href="${path}"]`);
-}
-
-function closeMenu(el) {
-  el.setAttribute('aria-expanded', false);
-}
-
-function openMenu(el) {
-  const expandedMenu = document.querySelector('.filter-button[aria-expanded=true]');
-  if (expandedMenu) { closeMenu(expandedMenu); }
-  el.setAttribute('aria-expanded', true);
 }
 
 function filterSearch(e) {
@@ -116,10 +117,8 @@ function filterSearch(e) {
   });
 }
 
-function enableSearch(id) {
-  const menu = document.querySelector(`[aria-labelledby='${id}']`);
-  const input = menu.querySelector('input');
-  input.addEventListener('keyup', filterSearch);
+function closeMenu(el) {
+  el.setAttribute('aria-expanded', false);
 }
 
 function disableSearch(id) {
@@ -131,6 +130,12 @@ function disableSearch(id) {
     option.classList.remove('hide');
   });
   input.removeEventListener('keyup', filterSearch);
+}
+
+function enableSearch(id) {
+  const menu = document.querySelector(`[aria-labelledby='${id}']`);
+  const input = menu.querySelector('input');
+  input.addEventListener('keyup', filterSearch);
 }
 
 function closeOnDocClick(e) {
@@ -156,10 +161,84 @@ function openCurtain() {
   window.addEventListener('click', closeOnDocClick);
 }
 
+function navigateFilterButtons(currentButton, forward) {
+  const allFilterButtons = [...document.querySelectorAll('.filter-button')];
+  const currentIndex = allFilterButtons.indexOf(currentButton);
+  if (currentIndex === -1) return;
+  let nextIndex;
+  if (forward) {
+    nextIndex = (currentIndex + 1) % allFilterButtons.length;
+  } else {
+    nextIndex = currentIndex === 0 ? allFilterButtons.length - 1 : currentIndex - 1;
+  }
+  const nextButton = allFilterButtons[nextIndex];
+  closeMenu(currentButton);
+  disableSearch(currentButton.id);
+  nextButton.focus();
+  // eslint-disable-next-line no-use-before-define
+  openMenu(nextButton);
+  enableSearch(nextButton.id);
+}
+
+function handleDropdownKeydown(e, firstElement, lastElement, triggerButton) {
+  const { key, shiftKey } = e;
+  if (key === 'Escape') {
+    e.preventDefault();
+    closeMenu(triggerButton);
+    disableSearch(triggerButton.id);
+    closeCurtain();
+    triggerButton.focus();
+    return;
+  }
+  if (key === 'Tab') {
+    if (shiftKey) {
+      if (document.activeElement === firstElement) {
+        e.preventDefault();
+        triggerButton.focus();
+      }
+    } else if (document.activeElement === lastElement) {
+      e.preventDefault();
+      firstElement.focus();
+    }
+  }
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    e.preventDefault();
+    navigateFilterButtons(triggerButton, key === 'ArrowRight');
+  }
+  if ((key === 'Enter' || key === ' ') && document.activeElement.type === 'checkbox') {
+    e.preventDefault();
+    document.activeElement.checked = !document.activeElement.checked;
+  }
+}
+
+function addFocusTrap(button) {
+  const dropdown = document.querySelector(`[aria-labelledby='${button.id}']`);
+  if (!dropdown) return;
+  if (dropdown.keydownHandler) {
+    dropdown.removeEventListener('keydown', dropdown.keydownHandler);
+  }
+  const focusableElements = dropdown.querySelectorAll(
+    'input, button',
+  );
+  if (focusableElements.length === 0) return;
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+
+  dropdown.keydownHandler = (e) => handleDropdownKeydown(e, firstElement, lastElement, button);
+  dropdown.addEventListener('keydown', dropdown.keydownHandler);
+}
+
+function openMenu(el) {
+  const expandedMenu = document.querySelector('.filter-button[aria-expanded=true]');
+  if (expandedMenu) { closeMenu(expandedMenu); }
+  el.setAttribute('aria-expanded', true);
+  addFocusTrap(el);
+}
+
 function toggleMenu(e) {
-  const button = e.target.closest('[role=button]');
-  const expanded = button.getAttribute('aria-expanded');
-  if (expanded === 'true') {
+  const button = e.currentTarget;
+  const expanded = button.getAttribute('aria-expanded') === 'true';
+  if (expanded) {
     closeMenu(button);
     disableSearch(button.id);
     closeCurtain();
@@ -178,18 +257,18 @@ function buildSelectedFilter(name) {
   return a;
 }
 
-function clearFilter(e, block, config) {
+function clearFilter(e, block) {
   const { target } = e;
   const checked = document
     .querySelector(`input[name='${target.textContent}']`);
   if (checked) { checked.checked = false; }
-  delete config.selectedProducts;
-  delete config.selectedIndustries;
+  delete blogIndex.config.selectedProducts;
+  delete blogIndex.config.selectedIndustries;
   // eslint-disable-next-line no-use-before-define
-  applyCurrentFilters(block, config);
+  applyCurrentFilters(block);
 }
 
-function applyCurrentFilters(block, config, close) {
+function applyCurrentFilters(block, close) {
   const filters = {};
   document.querySelectorAll('.filter-options').forEach((filter) => {
     const type = filter.getAttribute('data-type');
@@ -199,10 +278,10 @@ function applyCurrentFilters(block, config, close) {
         const boxType = box.parentElement.parentElement.getAttribute('data-type');
         const capBoxType = boxType.charAt(0).toUpperCase() + boxType.slice(1);
         subfilters.push(box.name);
-        if (config[`selected${capBoxType}`]) {
-          config[`selected${capBoxType}`] += `, ${box.name}`;
+        if (blogIndex.config[`selected${capBoxType}`]) {
+          blogIndex.config[`selected${capBoxType}`] += `, ${box.name}`;
         } else {
-          config[`selected${capBoxType}`] = box.name;
+          blogIndex.config[`selected${capBoxType}`] = box.name;
         }
       }
     });
@@ -223,8 +302,15 @@ function applyCurrentFilters(block, config, close) {
     Object.keys(filters).forEach((filter) => {
       filters[filter].forEach((f) => {
         const selectedFilter = buildSelectedFilter(f);
-        selectedFilter.addEventListener('click', (e) => {
-          clearFilter(e, block, config);
+        const handleClearFilter = (e) => {
+          clearFilter(e, block);
+        };
+        selectedFilter.addEventListener('click', handleClearFilter);
+        selectedFilter.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleClearFilter(e);
+          }
         });
         selectedFilters.append(selectedFilter);
       });
@@ -236,11 +322,11 @@ function applyCurrentFilters(block, config, close) {
   if (block) {
     block.innerHTML = '';
     // eslint-disable-next-line no-use-before-define
-    decorateArticleFeed(block, config);
+    decorateArticleFeed(block);
   }
 }
 
-function clearFilters(e, block, config) {
+function clearFilters(e, block) {
   const type = e.target.classList[e.target.classList.length - 1];
   let target = document;
   if (type === 'reset') {
@@ -251,17 +337,16 @@ function clearFilters(e, block, config) {
     const checked = dropdown.querySelectorAll('input:checked');
     checked.forEach((box) => { box.checked = false; });
   });
-  delete config.selectedProducts;
-  delete config.selectedIndustries;
-  applyCurrentFilters(block, config);
+  delete blogIndex.config.selectedProducts;
+  delete blogIndex.config.selectedIndustries;
+  applyCurrentFilters(block);
 }
 
 function buildFilterOption(itemName, type) {
   const name = itemName.replace(/\*/gm, '');
 
   const option = document.createElement('li');
-  option.classList
-    .add('filter-option', `filter-option-${type}`);
+  option.classList.add('filter-option', `filter-option-${type}`);
 
   const checkbox = document.createElement('input');
   checkbox.id = name;
@@ -278,21 +363,54 @@ function buildFilterOption(itemName, type) {
 
 async function buildFilter(type, tax, block, config) {
   const container = createTag('div', { class: 'filter' });
-
-  const button = document.createElement('a');
+  const button = document.createElement('button');
   button.classList.add('filter-button');
   button.id = `${type}-filter-button`;
-  button.setAttribute('aria-haspopup', true);
-  button.setAttribute('aria-expanded', false);
-  button.setAttribute('role', 'button');
+  button.setAttribute('tabindex', '0');
+  button.setAttribute('aria-haspopup', 'true');
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-controls', `${type}-filter-panel`);
   button.textContent = tax.getCategoryTitle(type);
   button.addEventListener('click', toggleMenu);
+  button.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleMenu(e);
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (button.getAttribute('aria-expanded') === 'true') {
+        closeMenu(button);
+        disableSearch(button.id);
+        closeCurtain();
+      }
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (button.getAttribute('aria-expanded') === 'true') {
+        navigateFilterButtons(button, e.key === 'ArrowRight');
+      } else {
+        const allButtons = [...document.querySelectorAll('.filter-button')];
+        const currentIndex = allButtons.indexOf(button);
+        let nextIndex;
+        if (e.key === 'ArrowRight') {
+          nextIndex = (currentIndex + 1) % allButtons.length;
+        } else {
+          nextIndex = currentIndex === 0 ? allButtons.length - 1 : currentIndex - 1;
+        }
+        allButtons[nextIndex].focus();
+      }
+    }
+  });
 
   const dropdown = createTag('div', { class: 'filter-dropdown' });
+  dropdown.id = `${type}-filter-panel`;
   dropdown.setAttribute('aria-labelledby', `${type}-filter-button`);
-  dropdown.setAttribute('role', 'menu');
+  dropdown.setAttribute('aria-modal', 'true');
 
-  const SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" focusable="false">
+  const SEARCH_ICON = `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" focusable="false">
     <path d="M14 2A8 8 0 0 0 7.4 14.5L2.4 19.4a1.5 1.5 0 0 0 2.1 2.1L9.5 16.6A8 8 0 1 0 14 2Zm0 14.1A6.1 6.1 0 1 1 20.1 10 6.1 6.1 0 0 1 14 16.1Z"></path>
   </svg>`;
   const searchBar = createTag('div', { class: 'filter-search' });
@@ -306,7 +424,10 @@ async function buildFilter(type, tax, block, config) {
   const options = document.createElement('ul');
   options.classList.add('filter-options');
   options.setAttribute('data-type', type);
+  options.setAttribute('aria-label', `${tax.getCategoryTitle(type)} ${await replacePlaceholder('filters')}`);
+
   const category = tax.getCategory(tax[`${type.toUpperCase()}`]);
+
   category.forEach((topic) => {
     const item = tax.get(topic, tax[`${type.toUpperCase()}`]);
     if (item.level === 1) {
@@ -321,16 +442,17 @@ async function buildFilter(type, tax, block, config) {
 
   const footer = createTag('div', { class: 'filter-dropdown-footer' });
 
-  const resetBtn = document.createElement('a');
+  const resetBtn = document.createElement('button');
   resetBtn.classList.add('button', 'small', 'reset');
+  resetBtn.setAttribute('tabindex', '0');
   resetBtn.textContent = await replacePlaceholder('reset');
   resetBtn.addEventListener('click', clearFilters);
 
-  const applyBtn = document.createElement('a');
+  const applyBtn = document.createElement('button');
   applyBtn.classList.add('button', 'small', 'apply');
+  applyBtn.setAttribute('tabindex', '0');
   applyBtn.textContent = await replacePlaceholder('apply');
   applyBtn.addEventListener('click', () => {
-    // sampleRUM('apply-topic-filter');
     delete config.selectedProducts;
     delete config.selectedIndustries;
     closeCurtain();
@@ -347,13 +469,13 @@ async function buildFilter(type, tax, block, config) {
 
 const isInList = (list, val) => list && list.map((t) => t.toLowerCase()).includes(val);
 
-async function filterArticles(config, feed, limit, offset) {
+async function filterArticles(feed, limit, offset) {
   /* filter posts by category, tag and author */
   const FILTER_NAMES = ['tags', 'topics', 'selectedProducts', 'selectedIndustries', 'author', 'category', 'exclude'];
 
-  const filters = Object.keys(config).reduce((prev, key) => {
+  const filters = Object.keys(blogIndex.config).reduce((prev, key) => {
     if (FILTER_NAMES.includes(key)) {
-      prev[key] = config[key].split(',').map((e) => e.toLowerCase().trim());
+      prev[key] = blogIndex.config[key].split(',').map((e) => e.toLowerCase().trim());
     }
 
     return prev;
@@ -361,7 +483,6 @@ async function filterArticles(config, feed, limit, offset) {
 
   while ((feed.data.length < limit + offset) && (!feed.complete)) {
     const beforeLoading = new Date();
-    // eslint-disable-next-line no-await-in-loop
     const index = await fetchBlogArticleIndex();
     const indexChunk = index.data.slice(feed.cursor);
 
@@ -410,7 +531,6 @@ async function filterArticles(config, feed, limit, offset) {
 
 async function decorateArticleFeed(
   articleFeedEl,
-  config,
   offset = 0,
   feed = { data: [], complete: false, cursor: 0 },
   limit = 12,
@@ -430,13 +550,13 @@ async function decorateArticleFeed(
   articleCards.append(container);
 
   const pageEnd = offset + limit;
-  await filterArticles(config, feed, limit, offset);
+  await filterArticles(feed, limit, offset);
   const articles = feed.data;
 
   if (articles.length) {
     // results were found
     container.remove();
-  } else if (config.selectedProducts || config.selectedIndustries) {
+  } else if (blogIndex.config.selectedProducts || blogIndex.config.selectedIndustries) {
     // no user filtered results were found
     spinner.remove();
     const noMatches = document.createElement('p');
@@ -460,22 +580,22 @@ async function decorateArticleFeed(
   }
   if (articles.length > pageEnd || !feed.complete) {
     const loadMore = document.createElement('a');
-    loadMore.className = 'load-more button small primary light';
+    loadMore.className = 'load-more con-button outline';
     loadMore.href = '#';
     loadMore.textContent = await replacePlaceholder('load-more');
     articleFeedEl.append(loadMore);
     loadMore.addEventListener('click', (event) => {
       event.preventDefault();
       loadMore.remove();
-      decorateArticleFeed(articleFeedEl, config, pageEnd, feed);
+      decorateArticleFeed(articleFeedEl, pageEnd, feed);
     });
   }
   articleFeedEl.classList.add('appear');
 }
 
-async function decorateFeedFilter(articleFeedEl, config) {
+async function decorateFeedFilter(articleFeedEl) {
   const taxonomy = getTaxonomyModule();
-  const parent = document.querySelector('.article-feed-container');
+  const parent = document.querySelector('.article-feed');
 
   const curtain = createTag('div', { class: 'filter-curtain hide' });
   document.querySelector('main').append(curtain);
@@ -488,8 +608,8 @@ async function decorateFeedFilter(articleFeedEl, config) {
   filterText.classList.add('filter-text');
   filterText.textContent = await replacePlaceholder('filters');
 
-  const productsDropdown = buildFilter('products', taxonomy, articleFeedEl, config);
-  const industriesDropdown = buildFilter('industries', taxonomy, articleFeedEl, config);
+  const productsDropdown = await buildFilter('products', taxonomy, articleFeedEl, blogIndex.config);
+  const industriesDropdown = await buildFilter('industries', taxonomy, articleFeedEl, blogIndex.config);
 
   filterWrapper.append(filterText, productsDropdown, industriesDropdown);
   filterContainer.append(filterWrapper);
@@ -509,25 +629,39 @@ async function decorateFeedFilter(articleFeedEl, config) {
 
   const clearBtn = document.createElement('a');
   clearBtn.classList.add('button', 'small', 'clear');
+  clearBtn.href = '#';
   clearBtn.textContent = await replacePlaceholder('clear-all');
-  clearBtn.addEventListener(
-    'click',
-    (e) => clearFilters(e, articleFeedEl, config),
-  );
+  const handleClearFilters = (e) => {
+    e.preventDefault();
+    clearFilters(e, articleFeedEl);
+  };
+  clearBtn.addEventListener('click', handleClearFilters);
+  clearBtn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleClearFilters(e);
+    }
+  });
 
   selectedWrapper.append(selectedText, selectedCategories, clearBtn);
   selectedContainer.append(selectedWrapper);
   parent.parentElement.insertBefore(selectedContainer, parent);
 }
 
-const clearBlock = (block) => { block.innerHTML = ''; };
+export default async function init(el) {
+  const initArticleFeed = async () => {
+    blogIndex.config = readBlockConfig(el);
+    el.innerHTML = '';
+    await loadTaxonomy();
+    if (blogIndex.config.filters) {
+      decorateFeedFilter(el);
+    }
+    decorateArticleFeed(el);
+  };
 
-export default async function init(articleFeed) {
-  const config = readBlockConfig(articleFeed);
-  clearBlock(articleFeed);
-  loadTaxonomy();
-  if (config.filters) {
-    decorateFeedFilter(articleFeed, config);
-  }
-  decorateArticleFeed(articleFeed, config);
+  createIntersectionObserver({
+    el,
+    options: { rootMargin: `${ROOT_MARGIN}px` },
+    callback: initArticleFeed,
+  });
 }

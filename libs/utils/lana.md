@@ -37,6 +37,7 @@ Note that any errors that happen on a `*.corp.adobe.com` domain will automatical
         * same as `sampleRate`
     * `useProd` - bool: Defaults to `true`
         * Toggle between prod and stage endpoints
+
 ## Helper Functions
 
 The helper functions have been deprecated in favor of the options being passed with every lana call.
@@ -51,6 +52,8 @@ Note that the default option state is stored in `window.lana.options` and can be
 
 Debugging mode can be enabled by setting a `lanaDebug` query param.  This sends lana messages with debug enabled and will console.log the responses.
 Alternatively, the `window.lana.debug` property can be set (the query param also sets this property).
+
+The Lana logging sample rate can be overridden with the `lana-sample` query param.  It should be set as an integer between 0-100.  This will set the sample rate for all lana messages regardless of other sample rates set.
 
 ## localhost
 
@@ -72,6 +75,37 @@ try {
     })
 }
 ```
+
+## Useage outside of Milo
+
+If you can use dynamic imports you can do similar to milo:
+```
+function loadLana(options = {}) {
+  if (window.lana) return;
+
+  const lanaError = (e) => {
+    window.lana?.log(e.reason || e.error || e.message, { errorType: 'i' });
+  };
+
+  window.lana = {
+    log: async (...args) => {
+      window.removeEventListener('error', lanaError);
+      window.removeEventListener('unhandledrejection', lanaError);
+      await import('https://milo.adobe.com/libs/utils/lana.js');
+      return window.lana.log(...args);
+    },
+    debug: false,
+    options,
+  };
+
+  window.addEventListener('error', lanaError);
+  window.addEventListener('unhandledrejection', lanaError);
+}
+```
+This has the advantage of not loading lana until it's needed.  This also will automatically catch any global errors or unhandledrejections.
+
+If you need to include lana.js directly (or can't load dynamic modules) you can use a script tag:
+`<script src="https://milo.adobe.com/libs/utils/lana.js"></script>`
 
 ## Notes
 * Implicit Error logging

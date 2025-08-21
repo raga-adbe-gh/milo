@@ -1,7 +1,7 @@
 .featured-article-card {
   display: flex;
   flex-direction: column;
-  margin: 0 auto;
+  margin: 0 auto 24px;
 }
 
 .featured-article a:any-link {
@@ -38,6 +38,10 @@
   padding-right: 0;
 }
 
+.featured-article-card-category {
+  min-height: 15px;
+}
+
 .featured-article-card-category,
 .featured-article-card-category a,
 .featured-article-card-date {
@@ -52,7 +56,8 @@
 
 .featured-article-card-body h3 {
   font-size: var(--type-heading-l-size);
-  line-height: var(--type-heading-l-lh);
+  color: var(--text-color);
+  line-height: var(--type-heading-base-lh);
   margin: 0;
   margin-bottom: 1rem;
   overflow: hidden;

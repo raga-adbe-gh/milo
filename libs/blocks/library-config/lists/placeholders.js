@@ -14,6 +14,7 @@ export default async function placeholderList(content, list) {
     const titleText = createTag('p', { class: 'item-title' }, placeholder.value);
     const title = createTag('li', { class: 'placeholder' }, titleText);
     const copy = createTag('button', { class: 'copy' });
+    copy.id = `${placeholder.value}-placeholder-copy`;
     copy.addEventListener('click', (e) => {
       e.target.classList.add('copied');
       setTimeout(() => { e.target.classList.remove('copied'); }, 3000);

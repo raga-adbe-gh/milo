@@ -10,6 +10,7 @@
 
 .card-horizontal a {
   color: var(--text-color);
+  text-decoration: none;
 }
 
 .card-horizontal a:focus {
@@ -65,13 +66,12 @@
   position: relative;
   display: flex;
   flex-direction: row;
-  text-align: left;
+  text-align: initial;
   align-items: center;
   background-color: white;
   border-radius: 4px;
   gap: var(--spacing-s);
   border: 1px solid #EAEAEA;
-  max-height: 130px;
   max-width: 600px;
   margin: 0 auto;
 }
@@ -89,13 +89,17 @@
 
 .card-horizontal .foreground .card-block .card-content {
   padding-right: var(--spacing-s);
-  margin: 16px 0;
   /* stylelint-disable-next-line value-no-vendor-prefix */
   display: -webkit-box;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
   flex-grow: 1;
+}
+
+[dir = "rtl"] .card-horizontal .foreground .card-block .card-content {
+  padding-left: var(--spacing-s);
+  padding-right: 0;
 }
 
 .card-horizontal .foreground .card-block .card-image {
@@ -151,6 +155,11 @@
   margin-left: var(--spacing-s);
 }
 
+[dir = "rtl"] .card-horizontal.tile .foreground .card-block .card-image img {
+  margin-left: 0;
+  margin-right: var(--spacing-s);
+}
+
 .two-up .card-horizontal .foreground .card-block .card-image,
 .three-up .card-horizontal .foreground .card-block .card-image {
   flex: 0 0 91px;
@@ -169,6 +178,11 @@
     padding-right: var(--spacing-m);
   }
 
+  [dir = "rtl"] .card-horizontal.tile .foreground .card-block .card-content {
+    padding-left: var(--spacing-m);
+    padding-right: 0;
+  }
+
   .card-horizontal.tile .foreground .card-block .card-image {
     flex: 0 0 106px;
   }
@@ -181,6 +195,11 @@
     width: 74px;
     height: 72px;
     margin-left: var(--spacing-m);
+  }
+
+  [dir = "rtl"] .card-horizontal.tile .foreground .card-block .card-image img {
+    margin-left: 0;
+    margin-right: var(--spacing-m);
   }
 
   .two-up .card-horizontal .foreground .card-block {
@@ -199,10 +218,20 @@
     padding-right: var(--spacing-s);
   }
 
+  [dir = "rtl"] .two-up .card-horizontal.tile .foreground .card-block .card-content {
+    padding-left: var(--spacing-s);
+    padding-right: 0;
+  }
+
   .two-up .card-horizontal.tile .foreground .card-block .card-image img {
     width: 74px;
     height: 72px;
     margin-left: var(--spacing-s);
+  }
+
+  [dir = "rtl"] .two-up .card-horizontal.tile .foreground .card-block .card-image img {
+    margin-left: 0;
+    margin-right: var(--spacing-s);
   }
 
   .three-up .card-horizontal.tile .foreground .card-block .card-image {
@@ -211,6 +240,11 @@
 
   .three-up .card-horizontal.tile .foreground .card-block .card-image img {
     margin-left: var(--spacing-s);
+  }
+
+  [dir = "rtl"] .three-up .card-horizontal.tile .foreground .card-block .card-image img {
+    margin-left: 0;
+    margin-right: var(--spacing-s);
   }
 }
 
@@ -224,12 +258,27 @@
     padding-right: var(--spacing-m);
   }
 
+  [dir = "rtl"] .card-horizontal .foreground .card-block .card-content {
+    padding-left: var(--spacing-m);
+    padding-right: 0;
+  }
+
   .two-up .card-horizontal .foreground .card-block .card-content {
     padding-right: var(--spacing-s);
   }
 
+  [dir = "rtl"] .two-up .card-horizontal .foreground .card-block .card-content {
+    padding-left: var(--spacing-s);
+    padding-right: 0;
+  }
+
   .three-up .card-horizontal .foreground .card-block .card-content {
     padding-right: var(--spacing-s);
+  }
+
+  [dir = "rtl"] .three-up .card-horizontal .foreground .card-block .card-content {
+    padding-left: var(--spacing-s);
+    padding-right: 0;
   }
 
   .card-horizontal .foreground .card-block .card-image {
@@ -264,11 +313,21 @@
     margin-left: var(--spacing-s);
   }
 
+  [dir = "rtl"] .two-up .card-horizontal.tile .foreground .card-block .card-image img {
+    margin-left: 0;
+    margin-right: var(--spacing-s);
+  }
+
   .three-up .card-horizontal.tile .foreground .card-block .card-image {
     flex: 0 0 98px;
   }
 
   .three-up .card-horizontal.tile .foreground .card-block .card-image img {
     margin-left: var(--spacing-s);
+  }
+
+  [dir = "rtl"] .three-up .card-horizontal.tile .foreground .card-block .card-image img {
+    margin-left: 0;
+    margin-right: var(--spacing-s);
   }
 }

@@ -1,5 +1,6 @@
-import { getConfig, getMetadata } from '../../utils/utils.js';
+import { getConfig } from '../../utils/utils.js';
 import * as taxonomyLibrary from '../../scripts/taxonomy.js';
+import { updateLinkWithLangRoot } from '../../utils/helpers.js';
 
 /*
  *
@@ -32,10 +33,9 @@ function calculateExcelDate(date) {
  * @param {Array} topics List of topics
  * @returns {Object} Taxonomy object
  */
-function computeTaxonomyFromTopics(topics, path) {
+export function computeTaxonomyFromTopics(topics, path) {
   // no topics: default to a randomly choosen category
   const category = topics?.length > 0 ? topics[0] : 'news';
-
   if (taxonomyModule) {
     const allTopics = [];
     const visibleTopics = [];
@@ -81,16 +81,22 @@ function loadArticleTaxonomy(article) {
   // for now, we can only compute the category
   const { tags, path } = clonedArticle;
 
+  let topics;
+
   if (tags) {
-    const topics = tags
-      .replace(/[["\]]/gm, '')
-      .split(',')
-      .map((t) => t.trim())
-      .filter((t) => t && t !== '');
+    if (Array.isArray(tags)) {
+      topics = tags.map((t) => t.trim()).filter((t) => t && t !== '');
+    } else {
+      topics = tags
+        .replace(/[["\]]/gm, '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t && t !== '');
+    }
 
     const articleTax = computeTaxonomyFromTopics(topics, path);
 
-    clonedArticle.category = articleTax.category;
+    clonedArticle.category ??= articleTax.category;
 
     // topics = tags as an array
     clonedArticle.topics = topics;
@@ -115,58 +121,56 @@ export function getTaxonomyModule() {
 }
 
 export async function loadTaxonomy() {
-  taxonomyLibrary.default(getConfig(), '/topics').then((_taxonomyModule) => {
-    taxonomyModule = _taxonomyModule;
-    if (taxonomyModule) {
-      // taxonomy loaded, post loading adjustments
-      // fix the links which have been created before the taxonomy has been loaded
-      // (pre lcp or in lcp block).
-      document.querySelectorAll('[data-topic-link]').forEach((a) => {
-        const topic = a.dataset.topicLink;
-        const tax = taxonomyModule.get(topic);
-        if (tax) {
-          a.href = tax.link;
-        } else {
-          // eslint-disable-next-line no-console
-          console.warn(`Trying to get a link for an unknown topic: ${topic} (current page)`);
-          a.href = '#';
+  const config = getConfig();
+  const taxonomyRoot = config.taxonomyRoot || '/topics';
+  taxonomyModule = await taxonomyLibrary.default(config, taxonomyRoot);
+  if (taxonomyModule) {
+    // taxonomy loaded, post loading adjustments
+    // fix the links which have been created before the taxonomy has been loaded
+    // (pre lcp or in lcp block).
+    document.querySelectorAll('[data-topic-link]').forEach((a) => {
+      const topic = a.dataset.topicLink;
+      const tax = taxonomyModule.get(topic);
+      if (tax) {
+        a.href = tax.link;
+      } else {
+        // eslint-disable-next-line no-console
+        window.lana.log(`Trying to get a link for an unknown topic: ${topic} (current page)`, { tags: 'article-feed' });
+        a.href = '#';
+      }
+      delete a.dataset.topicLink;
+    });
+
+    const currentTags = [...document.head.querySelectorAll('meta[property="article:tag"]')].map((el) => el.content) || [];
+    const articleTax = computeTaxonomyFromTopics(currentTags);
+
+    const allTopics = articleTax.allTopics || [];
+    allTopics.forEach((topic) => {
+      if (!currentTags.includes(topic)) {
+        // computed topic (parent...) is not in meta -> add it
+        const newMetaTag = document.createElement('meta');
+        newMetaTag.setAttribute('property', 'article:tag');
+        newMetaTag.setAttribute('content', topic);
+        document.head.append(newMetaTag);
+      }
+    });
+
+    currentTags.forEach((tag) => {
+      const tax = taxonomyModule.get(tag);
+      if (tax && tax.skipMeta) {
+        // if skipMeta, remove from meta "article:tag"
+        const meta = document.querySelector(`[property="article:tag"][content="${tag}"]`);
+        if (meta) {
+          meta.remove();
         }
-        delete a.dataset.topicLink;
-      });
-
-      // adjust meta article:tag
-
-      const currentTags = getMetadata('article:tag') || [];
-      const articleTax = computeTaxonomyFromTopics(currentTags);
-
-      const allTopics = articleTax.allTopics || [];
-      allTopics.forEach((topic) => {
-        if (!currentTags.includes(topic)) {
-          // computed topic (parent...) is not in meta -> add it
-          const newMetaTag = document.createElement('meta');
-          newMetaTag.setAttribute('property', 'article:tag');
-          newMetaTag.setAttribute('content', topic);
-          document.head.append(newMetaTag);
-        }
-      });
-
-      currentTags.forEach((tag) => {
-        const tax = taxonomyModule.get(tag);
-        if (tax && tax.skipMeta) {
-          // if skipMeta, remove from meta "article:tag"
-          const meta = document.querySelector(`[property="article:tag"][content="${tag}"]`);
-          if (meta) {
-            meta.remove();
-          }
-          // but add as meta with name
-          const newMetaTag = document.createElement('meta');
-          newMetaTag.setAttribute('name', tag);
-          newMetaTag.setAttribute('content', 'true');
-          document.head.append(newMetaTag);
-        }
-      });
-    }
-  });
+        // but add as meta with name
+        const newMetaTag = document.createElement('meta');
+        newMetaTag.setAttribute('name', tag);
+        newMetaTag.setAttribute('content', 'true');
+        document.head.append(newMetaTag);
+      }
+    });
+  }
 }
 
 /**
@@ -177,7 +181,7 @@ export async function loadTaxonomy() {
  */
 export function formatCardLocaleDate(date) {
   if (!date) return '';
-  const jsDate = !date.includes('-') ? calculateExcelDate(date) : date.replace(/-/g, '/');
+  const jsDate = !date.toString().includes('-') ? calculateExcelDate(date) : date.replace(/-/g, '/');
 
   const dateLocale = getConfig().locale?.ietf;
 
@@ -264,17 +268,17 @@ export function getArticleTaxonomy(article) {
  * @param {string} topic The topic name
  * @returns {string} A link tag as a string
  */
-function getLinkForTopic(topic, path) {
+export function getLinkForTopic(topic, path) {
   const titleSubs = { 'Transformation digitale': 'Transformation numérique' };
 
-  const catLink = [getTaxonomyModule()?.get(topic)].map((tax) => tax?.link ?? '#');
+  const catLink = updateLinkWithLangRoot([getTaxonomyModule()?.get(topic)].map((tax) => tax?.link ?? '#'));
 
   if (catLink === '#') {
     // eslint-disable-next-line no-console
     console.warn(`Trying to get a link for an unknown topic: ${topic} ${path ? `on page ${path}` : '(current page)'}`);
   }
 
-  return `<a href="${catLink ?? ''}" ${catLink ?? `data-topic-link="${topic}"`}>${titleSubs[topic] ?? topic}</a>`;
+  return `<a href="${catLink ?? ''}" ${!catLink ? `data-topic-link="${topic}"` : ''}>${titleSubs[topic] ?? topic}</a>`;
 }
 
 /**
@@ -283,7 +287,9 @@ function getLinkForTopic(topic, path) {
  * @returns card Generated card
  */
 export function buildArticleCard(article, type = 'article', eager = false) {
-  const { title, description, image, imageAlt, date } = article;
+  const {
+    title, h1, description, image, imageAlt, date,
+  } = article;
 
   const path = article.path.split('.')[0];
 
@@ -303,8 +309,8 @@ export function buildArticleCard(article, type = 'article', eager = false) {
       <p class="${type}-card-category">
         ${categoryTag}
       </p>
-      <h3>${title}</h3>
-      <p class="${type}-card-description">${description}</p>
+      <h3>${h1 || title}</h3>
+      <p class="${type}-card-description">${description && description !== '0' ? description : ''}</p>
       <p class="${type}-card-date">${formatCardLocaleDate(date)}
     </div>`;
   return card;

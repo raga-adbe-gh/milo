@@ -201,11 +201,13 @@ input.sk-library-search-input:focus {
   border-bottom: 1px solid #676767;
 }
 
-/* 
- * Fixes block list getting cut off with search 
+/*
+ * Fixes block list getting cut off with search
  * Margin height equal to search bar height
 */
-.sk-library ul.con-blocks-list.inset {
+.sk-library ul.con-blocks-list.inset,
+.sk-library ul.con-templates-list.inset,
+.sk-library ul.con-icons-list.inset  {
   margin-bottom: 39px;
 }
 
@@ -242,7 +244,9 @@ input.sk-library-search-input:focus {
   font-weight: 700;
 }
 
-.sk-library .block-group.is-hidden {
+.sk-library .block-group.is-hidden,
+.sk-library .icon-item.is-hidden,
+.con-templates-list .template.is-hidden {
   display: none;
 }
 
@@ -277,7 +281,8 @@ input.sk-library-search-input:focus {
   padding: 0 24px;
 }
 
-.sk-library li.placeholder {
+.sk-library li.placeholder,
+.sk-library li.template {
   padding: 0 12px;
 }
 
@@ -285,6 +290,26 @@ input.sk-library-search-input:focus {
   display: flex;
   gap: 12px;
   padding: 0 12px;
+}
+
+.sk-library li.icon-item img.icon-fed {
+  filter: invert(100%);
+}
+
+.sk-library li.template {
+  display: flex;
+  align-items: stretch;
+  justify-content: end;
+}
+
+.sk-library li.template .item-title {
+  flex: 1 1 100%;
+}
+
+.sk-library li.template button {
+  position: static;
+  height: unset;
+  width: 44px;
 }
 
 .in-page {
@@ -319,4 +344,8 @@ ul.con-type-list.con-assets-list {
 
 .con-assets-list li:nth-child(odd) {
   border-right: 1px solid #676767;
+}
+
+.con-personalization_tags-list .item-title::first-letter {
+  text-transform: capitalize;
 }

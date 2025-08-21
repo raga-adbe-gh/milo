@@ -1,0 +1,74 @@
+{
+  "total": 1,
+  "offset": 0,
+  "limit": 5,
+  "data": [
+    {
+      "action": "replace",
+      "selector": "in-block:my-block",
+      "page filter (optional)": "",
+      "param-newoffer=123": "",
+      "chrome": "/fragments/fragmentreplaced",
+      "target-var1": "/fragments/fragmentreplaced",
+      "firefox": "",
+      "android": "",
+      "ios": ""
+    },
+    {
+      "action": "replace",
+      "selector": "in-block:my-block .large-menu",
+      "page filter (optional)": "",
+      "param-newoffer=123": "",
+      "chrome": "/fragments/new-large-menu",
+      "target-var1": "/fragments/new-large-menu",
+      "firefox": "",
+      "android": "",
+      "ios": ""
+    },
+    {
+      "action": "replace",
+      "selector": "in-block:my-block /fragments/sub-menu",
+      "page filter (optional)": "",
+      "param-newoffer=123": "",
+      "chrome": "/fragments/new-sub-menu",
+      "target-var1": "/fragments/new-sub-menu",
+      "firefox": "",
+      "android": "",
+      "ios": ""
+    },
+    {
+      "action": "replace",
+      "selector": "in-block:my-block /fragments/new-sub-menu",
+      "page filter (optional)": "",
+      "param-newoffer=123": "",
+      "chrome": "/fragments/even-more-new-sub-menu",
+      "target-var1": "/fragments/even-more-new-sub-menu",
+      "firefox": "",
+      "android": "",
+      "ios": ""
+    },
+    {
+      "action": "replace",
+      "selector": "in-block:my-block /federal/fragments/new-sub-menu",
+      "page filter (optional)": "",
+      "param-newoffer=123": "",
+      "chrome": "/federal/fragments/even-more-new-sub-menu",
+      "target-var1": "/federal/fragments/even-more-new-sub-menu",
+      "firefox": "",
+      "android": "",
+      "ios": ""
+    },
+    {
+      "action": "replace",
+      "selector": "in-block:mas-block https://mas.adobe.com/studio.html#page=content&path=sandbox&query=64e0c5b8-9572-43e6-b0a7-fc68563589de",
+      "page filter (optional)": "",
+      "param-newoffer=123": "",
+      "chrome": "https://mas.adobe.com/studio.html#page=content&path=sandbox&query=aec092ef-d5b5-4271-8b6f-4bbd535fcc56",
+      "target-var1": "https://mas.adobe.com/studio.html#page=content&path=sandbox&query=aec092ef-d5b5-4271-8b6f-4bbd535fcc56",
+      "firefox": "",
+      "android": "",
+      "ios": ""
+    }
+  ],
+  ":type": "sheet"
+}

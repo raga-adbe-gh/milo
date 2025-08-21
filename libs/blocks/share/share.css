@@ -1,8 +1,19 @@
+@import '../../styles/inline.css';
+
 .share {
   margin-left: auto;
   margin-right: auto;
   text-align: center;
-  padding: 64px 0;
+  padding: 56px 0;
+  overflow: hidden;
+}
+
+.share.inline {
+  overflow: unset;
+}
+
+.share.dark {
+  background-color: #1E1E1E;
 }
 
 .share svg.icon {
@@ -18,24 +29,36 @@
   filter: brightness(0.7);
 }
 
-.share p.icon-container,
-.share p.icon-container a {
+
+.share ul.icon-container,
+.share ul.icon-container li,
+.share ul.icon-container li a {
   display: flex;
-  justify-content: center;
   align-items: center;
   padding-bottom: 0;
+  justify-content: center;
+}
+
+.share ul.icon-container {
+  list-style: none;
+  padding-left: 0;
+  gap: 18px;
 }
 
 .share p {
   padding-bottom: 8px;
 }
 
-.share p.icon-container svg {
-  color: #adadad;
+.share.dark p {
+  color: #fff;
 }
 
-.share p.icon-container > a:not(:first-child) {
-  margin-left: 18px;
+.share ul.icon-container svg {
+  color: var(--color-gray-600);
+}
+
+.share.dark ul.icon-container svg {
+  color: #fff;
 }
 
 .share .copy-to-clipboard {
@@ -49,7 +72,7 @@
   border-radius: 4px;
   border: 2px solid transparent;
   outline: none;
-  margin-left: 16px;
+  margin-left: -2px;
 }
 
 .share .copy-to-clipboard:focus-visible {
@@ -62,11 +85,10 @@
 
 .share .copy-to-clipboard::before {
   content: attr(data-copy-to-clipboard);
-  display: block;        
-  pointer-events: none;
+  display: block;
   position : absolute;
   bottom: 100%;
-  left: 50%;
+  left: -45%;
   transform: translate(-50%, -4px);
   opacity: 0;
   visibility: hidden;
@@ -80,10 +102,22 @@
   white-space: nowrap;
 }
 
+[dir="rtl"] .share ul.icon-container {
+  padding-right: 0;
+}
+
+[dir="rtl"] .share .copy-to-clipboard {
+  margin-left: 0;
+  margin-right: -2px;
+}
+
+[dir="rtl"] .share .copy-to-clipboard::before {
+  left: 150%;
+}
+
 .share .copy-to-clipboard::after {
   content: '';
   display: block;
-  pointer-events: none;
   position : absolute;
   bottom: 100%;
   left: 50%;
@@ -97,6 +131,10 @@
   clip-path: polygon(0 -5%, 50% 100%, 100% -5%);
 }
 
+.share.inline .copy-to-clipboard::after {
+  z-index: 8;
+}
+
 .share .copy-to-clipboard:hover::before,
 .share .copy-to-clipboard:focus::before,
 .share .copy-to-clipboard:hover::after,
@@ -104,6 +142,7 @@
   visibility: visible;
   opacity: 1;
   transition-delay: 0ms;
+  cursor: default;
 }
 
 .share .copy-to-clipboard:hover::before,
@@ -118,4 +157,43 @@
 
 .share .copy-to-clipboard.copy-to-clipboard-copied::before {
   content: attr(data-copied);
+}
+
+.share.inline {
+  margin: 0 auto;
+  text-align: center;
+  padding: 8px 0 16px;
+}
+
+.share.inline ul.icon-container {
+  justify-content: flex-start;
+  margin: 0;
+}
+
+main > .section > .share.inline {
+  margin: 0 auto;
+}
+
+main > .section > .inline-wrapper > .share.inline {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+main > .section.center .share.inline ul.icon-container {
+  margin: 0 auto;
+  justify-content: center;
+}
+
+@media screen and (min-width: 600px) {
+  .share .copy-to-clipboard::before,
+  [dir="rtl"] .share .copy-to-clipboard::before {
+    left: 50%;
+  }
+}
+
+.share .aria-live-container {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }

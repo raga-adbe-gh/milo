@@ -4,7 +4,7 @@ import {
   decorateLinks,
   getConfig,
   getMetadata,
-  loadScript,
+  loadIms,
   localizeLink,
 } from '../../utils/utils.js';
 
@@ -13,26 +13,20 @@ import {
   analyticsGetLabel,
 } from '../../martech/attributes.js';
 
-const COMPANY_IMG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 133.46 118.11"><defs><style>.cls-1{fill:#fa0f00;}</style></defs><polygon class="cls-1" points="84.13 0 133.46 0 133.46 118.11 84.13 0"/><polygon class="cls-1" points="49.37 0 0 0 0 118.11 49.37 0"/><polygon class="cls-1" points="66.75 43.53 98.18 118.11 77.58 118.11 68.18 94.36 45.18 94.36 66.75 43.53"/></svg>';
-const BRAND_IMG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 234"><defs><style>.cls-1{fill:#fa0f00;}.cls-2{fill:#fff;}</style></defs><rect class="cls-1" width="240" height="234" rx="42.5"/><path id="_256" data-name="256" class="cls-2" d="M186.617,175.95037H158.11058a6.24325,6.24325,0,0,1-5.84652-3.76911L121.31715,99.82211a1.36371,1.36371,0,0,0-2.61145-.034l-19.286,45.94252A1.63479,1.63479,0,0,0,100.92626,148h21.1992a3.26957,3.26957,0,0,1,3.01052,1.99409l9.2814,20.65452a3.81249,3.81249,0,0,1-3.5078,5.30176H53.734a3.51828,3.51828,0,0,1-3.2129-4.90437L99.61068,54.14376A6.639,6.639,0,0,1,105.843,50h28.31354a6.6281,6.6281,0,0,1,6.23289,4.14376L189.81885,171.046A3.51717,3.51717,0,0,1,186.617,175.95037Z"/></svg>';
-const SEARCH_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" focusable="false"><path d="M14 2A8 8 0 0 0 7.4 14.5L2.4 19.4a1.5 1.5 0 0 0 2.1 2.1L9.5 16.6A8 8 0 1 0 14 2Zm0 14.1A6.1 6.1 0 1 1 20.1 10 6.1 6.1 0 0 1 14 16.1Z"></path></svg>';
+const COMPANY_IMG = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="22" viewBox="0 0 24 22" fill="none"><path d="M14.2353 21.6209L12.4925 16.7699H8.11657L11.7945 7.51237L17.3741 21.6209H24L15.1548 0.379395H8.90929L0 21.6209H14.2353Z" fill="#EB1000"/></svg>';
+const BRAND_IMG = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 234"><defs><style>.cls-1{fill:#eb1000;}.cls-2{fill:#fff;}</style></defs><rect class="cls-1" width="240" height="234" rx="42.5"/><path id="_256" data-name="256" class="cls-2" d="M186.617,175.95037H158.11058a6.24325,6.24325,0,0,1-5.84652-3.76911L121.31715,99.82211a1.36371,1.36371,0,0,0-2.61145-.034l-19.286,45.94252A1.63479,1.63479,0,0,0,100.92626,148h21.1992a3.26957,3.26957,0,0,1,3.01052,1.99409l9.2814,20.65452a3.81249,3.81249,0,0,1-3.5078,5.30176H53.734a3.51828,3.51828,0,0,1-3.2129-4.90437L99.61068,54.14376A6.639,6.639,0,0,1,105.843,50h28.31354a6.6281,6.6281,0,0,1,6.23289,4.14376L189.81885,171.046A3.51717,3.51717,0,0,1,186.617,175.95037Z"/></svg>';
+const BRAND_LOGO_AS_TEXT = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" id="Layer_1" viewBox="0 0 64.57 35"><defs><style>.cls-1{fill: #eb1000;}</style></defs><path class="cls-1" d="M6.27,10.22h4.39l6.2,14.94h-4.64l-3.92-9.92-2.59,6.51h3.08l1.23,3.41H0l6.27-14.94ZM22.03,13.32c.45,0,.94.04,1.43.16v-3.7h3.88v14.72c-.89.4-2.81.89-4.73.89-3.48,0-6.47-1.98-6.47-5.93s2.88-6.13,5.89-6.13ZM22.52,22.19c.36,0,.65-.07.94-.16v-5.42c-.29-.11-.58-.16-.96-.16-1.27,0-2.45.94-2.45,2.92s1.2,2.81,2.47,2.81ZM34.25,13.32c3.23,0,5.98,2.18,5.98,6.02s-2.74,6.02-5.98,6.02-6-2.18-6-6.02,2.72-6.02,6-6.02ZM34.25,22.13c1.11,0,2.14-.89,2.14-2.79s-1.03-2.79-2.14-2.79-2.12.89-2.12,2.79.96,2.79,2.12,2.79ZM41.16,9.78h3.9v3.7c.47-.09.96-.16,1.45-.16,3.03,0,5.84,1.98,5.84,5.86,0,4.1-2.99,6.18-6.53,6.18-1.52,0-3.46-.31-4.66-.87v-14.72ZM45.91,22.17c1.34,0,2.56-.96,2.56-2.94,0-1.85-1.2-2.72-2.5-2.72-.36,0-.65.04-.91.16v5.35c.22.09.51.16.85.16ZM58.97,13.32c2.92,0,5.6,1.87,5.6,5.64,0,.51-.02,1-.09,1.49h-7.27c.4,1.32,1.56,1.94,3.01,1.94,1.18,0,2.27-.29,3.5-.82v2.97c-1.14.58-2.5.82-3.9.82-3.7,0-6.58-2.23-6.58-6.02s2.61-6.02,5.73-6.02ZM60.93,18.02c-.2-1.27-1.05-1.78-1.92-1.78s-1.58.54-1.87,1.78h3.79Z"/></svg>';
+const SEARCH_ICON = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" focusable="false"><path d="M14 2A8 8 0 0 0 7.4 14.5L2.4 19.4a1.5 1.5 0 0 0 2.1 2.1L9.5 16.6A8 8 0 1 0 14 2Zm0 14.1A6.1 6.1 0 1 1 20.1 10 6.1 6.1 0 0 1 14 16.1Z"></path></svg>';
 const SEARCH_DEBOUNCE_MS = 300;
 export const IS_OPEN = 'is-open';
+const SEARCH_TYPE_CONTEXTUAL = 'contextual';
 
-const getLocale = () => document.documentElement.getAttribute('lang') || 'en-US';
+const getLocale = () => getConfig()?.locale?.ietf || 'en-US';
 const getCountry = () => getLocale()?.split('-').pop() || 'US';
 const isHeading = (el) => el?.nodeName.startsWith('H');
 const childIndexOf = (el) => [...el.parentElement.children]
   .filter((e) => (e.nodeName === 'DIV' || e.nodeName === 'P'))
   .indexOf(el);
-
-const debounce = (func, timeout = 300) => {
-  let timer;
-  return async (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => func.apply(this, args), timeout);
-  };
-};
 
 function getBlockClasses(className) {
   const trimDashes = (str) => str.replace(/(^\s*-)|(-\s*$)/g, '');
@@ -55,9 +49,6 @@ class Gnav {
     this.curtain = createTag('div', { class: 'gnav-curtain' });
     const nav = createTag('nav', { class: 'gnav', 'aria-label': 'Main' });
 
-    const mobileToggle = this.decorateToggle(nav);
-    nav.append(mobileToggle);
-
     const brand = this.decorateBrand();
     if (brand) {
       nav.append(brand);
@@ -66,11 +57,9 @@ class Gnav {
     const scrollWrapper = createTag('div', { class: 'mainnav-wrapper' });
 
     const mainNav = this.decorateMainNav();
-    if (mainNav) {
-      const cta = this.decorateCta();
-      if (cta) {
-        mainNav.append(cta);
-      }
+    if (mainNav && mainNav.childElementCount) {
+      const mobileToggle = this.decorateToggle();
+      nav.prepend(mobileToggle);
       scrollWrapper.append(mainNav);
     }
 
@@ -106,25 +95,47 @@ class Gnav {
 
   loadSearch = async () => {
     if (this.onSearchInput) return;
+
     const { onSearchInput, getHelpxLink } = await import('./gnav-search.js');
-    this.onSearchInput = debounce(onSearchInput, SEARCH_DEBOUNCE_MS);
     this.getHelpxLink = getHelpxLink;
+
+    const { debounce } = await import('../../utils/action.js');
+    if (this.searchType === SEARCH_TYPE_CONTEXTUAL) {
+      const { default: onContextualSearchInput } = await import('./gnav-contextual-search.js');
+      this.onSearchInput = debounce(onContextualSearchInput, SEARCH_DEBOUNCE_MS);
+    } else {
+      this.onSearchInput = debounce(onSearchInput, SEARCH_DEBOUNCE_MS);
+    }
   };
 
   decorateToggle = () => {
     const toggle = createTag('button', { class: 'gnav-toggle', 'aria-label': 'Navigation menu', 'aria-expanded': false });
-    const onMediaChange = (e) => {
+    let onMediaChange;
+    const closeToggleOnDocClick = ({ target }) => {
+      if (target !== toggle && !target.closest('.mainnav-wrapper')) {
+        this.el.classList.remove(IS_OPEN);
+        this.desktop.removeEventListener('change', onMediaChange);
+        document.removeEventListener('click', closeToggleOnDocClick);
+      }
+    };
+    onMediaChange = (e) => {
       if (e.matches) {
         this.el.classList.remove(IS_OPEN);
+        document.removeEventListener('click', closeToggleOnDocClick);
       }
     };
     toggle.addEventListener('click', async () => {
       if (this.el.classList.contains(IS_OPEN)) {
         this.el.classList.remove(IS_OPEN);
         this.desktop.removeEventListener('change', onMediaChange);
+        document.removeEventListener('click', closeToggleOnDocClick);
       } else {
+        if (this.state.openMenu) {
+          this.closeMenu();
+        }
         this.el.classList.add(IS_OPEN);
         this.desktop.addEventListener('change', onMediaChange);
+        document.addEventListener('click', closeToggleOnDocClick);
         this.loadSearch();
       }
     });
@@ -134,6 +145,7 @@ class Gnav {
   decorateBrand = () => {
     const brandBlock = this.body.querySelector('[class^="gnav-brand"]');
     if (!brandBlock) return null;
+    const isBrandImage = brandBlock.matches('.brand-image-only');
     const brandLinks = [...brandBlock.querySelectorAll('a')];
     const brand = brandLinks.pop();
     const brandTitle = brand.textContent;
@@ -147,10 +159,11 @@ class Gnav {
         decorateSVG(brandLinks[0]);
         brand.insertAdjacentElement('afterbegin', brandBlock.querySelector('img'));
       } else {
-        brand.insertAdjacentHTML('afterbegin', BRAND_IMG);
+        const DEFAULT_IMAGE = isBrandImage ? BRAND_LOGO_AS_TEXT : BRAND_IMG;
+        brand.insertAdjacentHTML('afterbegin', DEFAULT_IMAGE);
       }
     }
-    brand.append(title);
+    if (!isBrandImage) brand.append(title);
     return brand;
   };
 
@@ -167,7 +180,7 @@ class Gnav {
 
   decorateMainNav = () => {
     const mainNav = createTag('div', { class: 'gnav-mainnav' });
-    const mainLinks = this.body.querySelectorAll('h2 > a');
+    const mainLinks = this.body.querySelectorAll('h2 > a, strong a');
     if (mainLinks.length > 0) {
       this.buildMainNav(mainNav, mainLinks);
     }
@@ -176,6 +189,11 @@ class Gnav {
 
   buildMainNav = (mainNav, navLinks) => {
     navLinks.forEach((navLink, idx) => {
+      if (navLink.parentElement.nodeName === 'STRONG') {
+        const cta = Gnav.decorateCta(navLink);
+        mainNav.append(cta);
+        return;
+      }
       navLink.href = localizeLink(navLink.href);
       const navItem = createTag('div', { class: 'gnav-navitem' });
       const navBlock = navLink.closest('.large-menu');
@@ -189,7 +207,7 @@ class Gnav {
         const id = `navmenu-${idx}`;
         menu.id = id;
         navItem.classList.add('has-menu');
-        this.setNavLinkAttributes(id, navLink);
+        Gnav.setNavLinkAttributes(id, navLink);
       }
       // Small and medium menu types
       if (menu.childElementCount > 0) {
@@ -209,7 +227,7 @@ class Gnav {
     return mainNav;
   };
 
-  setNavLinkAttributes = (id, navLink) => {
+  static setNavLinkAttributes = (id, navLink) => {
     navLink.setAttribute('role', 'button');
     navLink.setAttribute('aria-expanded', false);
     navLink.setAttribute('aria-controls', id);
@@ -217,7 +235,7 @@ class Gnav {
     navLink.setAttribute('daa-lh', 'header|Open');
   };
 
-  decorateLinkGroups = (menu) => {
+  static decorateLinkGroups = (menu) => {
     const linkGroups = menu.querySelectorAll('.link-group');
     linkGroups.forEach((linkGroup) => {
       const image = linkGroup.querySelector('picture');
@@ -266,10 +284,10 @@ class Gnav {
 
   decorateAnalytics = (menu) => [...menu.children].forEach((child) => this.setMenuAnalytics(child));
 
-  decorateButtons = (menu) => {
+  static decorateButtons = (menu) => {
     const buttons = menu.querySelectorAll('strong a');
     buttons.forEach((btn) => {
-      btn.classList.add('con-button', 'filled', 'blue', 'button-M');
+      btn.classList.add('con-button', 'filled', 'blue', 'button-m');
     });
   };
 
@@ -288,7 +306,7 @@ class Gnav {
       decorateLinks(container);
       menu.append(container);
     }
-    this.decorateLinkGroups(menu);
+    Gnav.decorateLinkGroups(menu);
     this.decorateAnalytics(menu);
     navLink.addEventListener('focus', () => {
       window.addEventListener('keydown', this.toggleOnSpace);
@@ -298,10 +316,9 @@ class Gnav {
     });
     navLink.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
       this.toggleMenu(navItem);
     });
-    this.decorateButtons(menu);
+    Gnav.decorateButtons(menu);
     return menu;
   };
 
@@ -330,14 +347,13 @@ class Gnav {
     });
   };
 
-  decorateCta = () => {
-    const cta = this.body.querySelector('strong a');
+  static decorateCta = (cta) => {
     if (cta) {
       const { origin } = new URL(cta.href);
       if (origin !== window.location.origin) {
         cta.target = '_blank';
       }
-      cta.classList.add('con-button', 'blue', 'button-M');
+      cta.classList.add('con-button', 'blue', 'button-m');
       cta.setAttribute('daa-ll', analyticsGetLabel(cta.textContent));
       cta.parentElement.classList.add('gnav-cta');
       return cta.parentElement;
@@ -347,32 +363,51 @@ class Gnav {
 
   decorateSearch = () => {
     const searchBlock = this.body.querySelector('.search');
-    if (searchBlock) {
-      const label = searchBlock.querySelector('p').textContent;
-      const searchEl = createTag('div', { class: 'gnav-search' });
-      const searchBar = this.decorateSearchBar(label);
-      const searchButton = createTag(
-        'button',
-        {
-          class: 'gnav-search-button',
-          'aria-label': label,
-          'aria-expanded': false,
-          'aria-controls': 'gnav-search-bar',
-          'daa-ll': 'Search',
-        },
-        SEARCH_ICON,
-      );
-      searchButton.addEventListener('click', () => {
-        this.loadSearch();
-        this.toggleMenu(searchEl);
-      });
-      searchEl.append(searchButton, searchBar);
-      return searchEl;
+    if (!searchBlock) return null;
+
+    const isContextual = searchBlock.classList.contains(SEARCH_TYPE_CONTEXTUAL);
+    if (isContextual) {
+      this.searchType = SEARCH_TYPE_CONTEXTUAL;
     }
-    return null;
+
+    const advancedSearchEl = searchBlock.querySelector('a:not([href$=".json"])');
+    let advancedSearchWrapper = null;
+    if (advancedSearchEl) {
+      advancedSearchWrapper = createTag('li', null, advancedSearchEl);
+    }
+
+    const contextualConfig = {};
+    [...searchBlock.children].forEach(({ children }, index) => {
+      if (index === 0 || children.length !== 2) return;
+      const key = children[0].textContent?.toLowerCase();
+      const link = children[1].querySelector('a');
+      const value = link ? link.href : children[1].textContent;
+      contextualConfig[key] = value;
+    });
+
+    const label = searchBlock.querySelector('p').textContent;
+    const searchEl = createTag('div', { class: `gnav-search ${isContextual ? SEARCH_TYPE_CONTEXTUAL : ''}` });
+    const searchBar = this.decorateSearchBar(label, advancedSearchWrapper, contextualConfig);
+    const searchButton = createTag(
+      'button',
+      {
+        class: 'gnav-search-button',
+        'aria-label': label,
+        'aria-expanded': false,
+        'aria-controls': 'gnav-search-bar',
+        'daa-ll': 'Search',
+      },
+      SEARCH_ICON,
+    );
+    searchButton.addEventListener('click', () => {
+      this.loadSearch();
+      this.toggleMenu(searchEl);
+    });
+    searchEl.append(searchButton, searchBar);
+    return searchEl;
   };
 
-  decorateSearchBar = (label) => {
+  decorateSearchBar = (label, advancedSearchEl, contextualConfig) => {
     const searchBar = createTag('aside', { id: 'gnav-search-bar', class: 'gnav-search-bar' });
     const searchField = createTag('div', { class: 'gnav-search-field' }, SEARCH_ICON);
     const searchInput = createTag('input', {
@@ -383,15 +418,24 @@ class Gnav {
     const searchResults = createTag('div', { class: 'gnav-search-results' });
     const searchResultsUl = createTag('ul');
     searchResults.append(searchResultsUl);
-    const locale = getLocale();
+    const { locale } = getConfig();
+
+    locale.geo = getCountry();
 
     searchInput.addEventListener('input', (e) => {
-      this.onSearchInput(e.target.value, searchResultsUl, locale, searchInput);
+      this.onSearchInput?.({
+        value: e.target.value,
+        resultsEl: searchResultsUl,
+        locale,
+        searchInputEl: searchInput,
+        advancedSearchEl,
+        contextualConfig,
+      });
     });
 
     searchInput.addEventListener('keydown', (e) => {
-      if (e.code === 'Enter') {
-        window.open(this.getHelpxLink(e.target.value, getCountry()));
+      if (advancedSearchEl && e.code === 'Enter') {
+        window.open(this.getHelpxLink(e.target.value, locale.prefix, locale.geo));
       }
     });
 
@@ -399,6 +443,8 @@ class Gnav {
     searchBar.append(searchField, searchResults);
     return searchBar;
   };
+
+  static getNoResultsEl = (advancedSearchEl) => createTag('li', null, advancedSearchEl);
 
   /* c8 ignore start */
   getAppLauncher = async (profileEl) => {
@@ -415,22 +461,15 @@ class Gnav {
     const profileEl = createTag('div', { class: 'gnav-profile' });
     if (blockEl.children.length > 1) profileEl.classList.add('has-menu');
 
-    const defaultOnReady = () => {
-      this.imsReady(blockEl, profileEl); ;
-    }
-
-    const { locale, imsClientId, env, onReady } = getConfig();
+    const { imsClientId } = getConfig();
     if (!imsClientId) return null;
-    window.adobeid = {
-      client_id: imsClientId,
-      scope: 'AdobeID,openid,gnav',
-      locale: locale?.ietf?.replace('-', '_') || 'en_US',
-      autoValidateToken: true,
-      environment: env.ims,
-      useLocalStorage: false,
-      onReady: onReady || defaultOnReady,
-    };
-    loadScript('https://auth.services.adobe.com/imslib/imslib.min.js');
+
+    loadIms()
+      .then(() => {
+        this.imsReady(blockEl, profileEl);
+      })
+      .catch(() => {});
+
     return profileEl;
   };
 
@@ -470,11 +509,12 @@ class Gnav {
       profileEl.insertAdjacentElement('beforeend', dropDown);
 
       this.decorateMenu(profileEl, signIn, dropDown);
-      this.setNavLinkAttributes(id, signIn);
+      Gnav.setNavLinkAttributes(id, signIn);
     }
     signInEl.addEventListener('click', (e) => {
       e.preventDefault();
-      window.adobeIMS.signIn();
+      const { signInContext } = getConfig();
+      window.adobeIMS.signIn(signInContext);
     });
     profileEl.append(signIn);
   };
@@ -633,6 +673,7 @@ export default async function init(header) {
     header.setAttribute('daa-lh', `gnav${name}`);
     return gnav;
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.log('Could not create global navigation:', e);
     return null;
   }
