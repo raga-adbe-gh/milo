@@ -177,6 +177,7 @@ Preview paths are filtered based on:
 
 ```bash
 cd .github/workflows/preview-indexer
+echo "registry=https://registry.npmjs.org/" > .npmrc
 npm install
 ```
 
