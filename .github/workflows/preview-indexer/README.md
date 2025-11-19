@@ -207,7 +207,8 @@ LOCAL_RUN=true
 #### Run Incremental Index
 
 ```bash
-node --env-file=.env .github/workflows/preview-indexer/incremental.js
+cd .github/workflows/preview-indexer
+node --env-file=../../../.env incremental.js
 ```
 
 With manual parameters:
