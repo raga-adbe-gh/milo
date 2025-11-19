@@ -29,6 +29,7 @@ const axiosWithRetry = createAxiosWithRetry();
 export async function getLingoConfigMap() {
   const { LINGO_CONFIG } = process.env;
   if (!LINGO_CONFIG) {
+    console.error('LINGO_CONFIG is not set');
     return {};
   }
   try {
