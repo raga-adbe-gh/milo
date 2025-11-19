@@ -7,7 +7,7 @@ on:
         description: "Site name e.g da-bacom"
         required: false
         type: string
-      siteRegions:
+      siteRegionPaths:
         description: "Comma-separated regional paths e.g /au/,/de/"
         required: false
         type: string
