@@ -41,7 +41,7 @@ env:
 
 jobs:
   preview-indexer:
-    if: github.repository_owner == 'adobecom'
+    if: github.repository_owner == 'raga-adbe-gh'
     runs-on: ubuntu-latest
     steps:
       - name: Check if previous run is in progress
