@@ -1,6 +1,8 @@
 name: Generate Full Preview Index For DA Tenant Regional Path
 
 on:
+  schedule:
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       site:

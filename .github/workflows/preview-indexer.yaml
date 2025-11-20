@@ -3,20 +3,20 @@ name: Generate/Updates Preview Index For DA Tenants
 on:
   workflow_dispatch:
     inputs:
-      lastRunISOTo:
-        description: "Last ISO To timestamp"
-        required: false
-        type: string
-      lastRunISOFrom:
-        description: "Last ISO From timestamp"
-        required: false
-        type: string
       site:
         description: "Site name e.g da-bacom"
         required: false
         type: string
       siteRegionPaths:
         description: "Comma-separated regional paths e.g /au/,/de/"
+        required: false
+        type: string
+      lastRunISOFrom:
+        description: "Last ISO From timestamp"
+        required: false
+        type: string
+      lastRunISOTo:
+        description: "Last ISO To timestamp"
         required: false
         type: string
 
@@ -97,7 +97,7 @@ jobs:
       - name: Install dependencies
         run: cd ./.github/workflows/preview-indexer/ && npm install
 
-      - name: Run preview-indexer/index.js
+      - name: Run preview-indexer/incremental.js
         run: node ./.github/workflows/preview-indexer/incremental.js
         env:
           LAST_RUN_ISO_TO: ${{ github.event.inputs.lastRunISOTo }}
