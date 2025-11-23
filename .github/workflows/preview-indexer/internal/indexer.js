@@ -142,27 +142,32 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap) => {
     const previewPathsPerRoot = getPathsPerRoot(previewRoots, filteredPreviewPaths);
 
     for (const rootPath of previewRoots) {
-      const root = previewPathsPerRoot[rootPath];
+      const previewRoot = previewPathsPerRoot[rootPath];
+      const unpreviewRoot = unpreviewPathsPerRoot[rootPath];
+      if (!previewRoot?.paths?.length && !unpreviewRoot?.paths?.length) {
+        continue;
+      }
       console.log(`Processing root: ${rootPath}`);
-      const currentData = await getJsonFromDa(siteOrg, siteRepo, root.indexPath);
+      console.log(previewRoot.paths)
+      const currentData = await getJsonFromDa(siteOrg, siteRepo, previewRoot.indexPath || unpreviewRoot.indexPath);
       let previewIndex = { ...previewJsonTemplate };
       if (currentData?.data?.length) {
         const filteredCurrentData = currentData.data.filter((item) => !unpreviewPathsPerRoot[rootPath]?.paths?.includes(item.Path));
         const mergedSet = new Set(filteredCurrentData.map((item) => item.Path));
-        root.paths.forEach((path) => {
+        previewRoot.paths?.forEach((path) => {
           mergedSet.add(path);
         });
         const mergedData = [...mergedSet].map((path) => ({ Path: path }));
         const { length } = mergedData;
         previewIndex = { ...previewIndex, total: length, limit: length, data: mergedData };
-      } else {
-        const pathData = root.paths.map((path) => ({ Path: path }));
-        const { length } = root.paths;
+      } else if (previewRoot.paths) {
+        const pathData = previewRoot.paths.map((path) => ({ Path: path }));
+        const { length } = previewRoot.paths;
         previewIndex = { ...previewIndex, total: length, limit: length, data: pathData };
       }
-      const result = await saveJsonToDa(siteOrg, siteRepo, root.indexPath, previewIndex);
+      const result = await saveJsonToDa(siteOrg, siteRepo, previewRoot.indexPath, previewIndex);
       console.log(`Preview index saved to DA at ${result.daHref}`);
-      const previewResult = await triggerPreview(siteOrg, siteRepo, root.indexPreviewPath);
+      const previewResult = await triggerPreview(siteOrg, siteRepo, previewRoot.indexPreviewPath);
       console.log(`Preview result: ${previewResult?.preview?.url}`);
     }
 
