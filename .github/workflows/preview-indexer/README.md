@@ -212,15 +212,6 @@ cd .github/workflows/preview-indexer
 node --env-file=../../../.env incremental.js
 ```
 
-With manual parameters:
-```bash
-LAST_RUN_ISO_FROM="2025-10-19T20:30:35.751Z" \
-LAST_RUN_ISO_TO="2025-10-20T17:22:06.988Z" \
-SITE="da-bacom" \
-SITE_REGION_PATHS="/be_en/,/ch_fr/,/lu_de/" \
-node --env-file=.env .github/workflows/preview-indexer/incremental.js
-```
-
 #### Run Full Index
 
 ```bash
