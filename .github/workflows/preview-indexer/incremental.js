@@ -3,7 +3,7 @@ import { getLingoConfigMap } from './internal/utils.js';
 import { initIndexer } from './internal/indexer.js';
 
 // Add delay of 90 seconds before processing begins
-await new Promise(resolve => setTimeout(resolve, 360 * 1000));
+await new Promise(resolve => setTimeout(resolve, 600 * 1000));
 
 const ORG = 'adobecom';
 
