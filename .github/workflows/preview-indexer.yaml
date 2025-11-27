@@ -2,7 +2,7 @@ name: Generate/Updates Preview Index For DA Tenants
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/1 * * * *"
   workflow_dispatch:
     inputs:
       site:
