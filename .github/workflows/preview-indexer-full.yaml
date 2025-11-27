@@ -79,7 +79,3 @@ jobs:
         env:
           SITE: ${{ github.event.inputs.site }}
           SITE_REGION_PATHS: ${{ github.event.inputs.siteRegionPaths }}
-
-      - name: Remove lock file
-        if: always()
-        run: rm -f preview-indexer/state/job.lock

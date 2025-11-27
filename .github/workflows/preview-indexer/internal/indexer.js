@@ -147,8 +147,8 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap) => {
       if (!previewRoot?.paths?.length && !unpreviewRoot?.paths?.length) {
         continue;
       }
-      console.log(`Processing root: ${rootPath}`);
-      console.log(previewRoot.paths)
+      console.log(`Processing root: ${rootPath}, Preview Paths: ${previewRoot?.paths?.length}`);
+      console.log(`unpreview paths: ${unpreviewRoot?.paths?.length}`);
       const currentData = await getJsonFromDa(siteOrg, siteRepo, previewRoot.indexPath || unpreviewRoot.indexPath);
       let previewIndex = { ...previewJsonTemplate };
       if (currentData?.data?.length) {
