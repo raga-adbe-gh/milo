@@ -42,7 +42,7 @@ jobs:
         id: cache-restore-lock
         uses: actions/cache@v4
         with:
-          path: preview-indexer/lock/indexer.json
+          path: preview-indexer/lock/indexer.txt
           key: preview-indexer-lock-${{ github.run_id }}
           restore-keys: preview-indexer-lock-
 
@@ -51,20 +51,20 @@ jobs:
           mkdir -p preview-indexer/lock
           
           # Check
-          if [ -f preview-indexer/lock/indexer.json ]; then
+          if [ -f preview-indexer/lock/indexer.txt ]; then
             echo "Lock file exists. Another indexer is running. Exiting."
             exit 1
           fi
           
           # Create new lock
-          echo "locked" > preview-indexer/lock/indexer.json
+          echo "locked" > preview-indexer/lock/indexer.txt
           echo "Lock set."
 
       - name: Save lock cache
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: preview-indexer/lock/indexer.json
+          path: preview-indexer/lock/indexer.txt
           key: preview-indexer-lock-${{ github.run_id }}
       # LOCKING LOGIC ENDS
 
@@ -111,12 +111,12 @@ jobs:
       - name: Release lock
         if: always()
         run: |
-          rm -f preview-indexer/lock/indexer.json
+          rm -f preview-indexer/lock/indexer.txt
 
       - name: Save updated cache
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: preview-indexer/lock/indexer.json
+          path: preview-indexer/lock/indexer.txt
           key: preview-indexer-lock-${{ github.run_id }}
       # RELEASING LOCK ENDS
