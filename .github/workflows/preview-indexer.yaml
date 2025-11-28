@@ -27,8 +27,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read # required to access workflow runs
-  contents: write # required to access the repository, for the dispatch event
+  actions: write
+  contents: write
 
 env:
   ROLLING_IMPORT_IMS_URL: ${{ secrets.ROLLING_IMPORT_IMS_URL }}
