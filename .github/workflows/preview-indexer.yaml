@@ -51,6 +51,37 @@ jobs:
     if: github.repository_owner == 'raga-adbe-gh'
     runs-on: ubuntu-latest
     steps:
+      # LOCKING LOGIC BEINGS
+      - name: Restore lock cache
+        id: cache-restore-lock
+        uses: actions/cache@v4
+        with:
+          path: preview-indexer/lock/indexer.json
+          key: preview-indexer-lock-${{ github.run_id }}
+          restore-keys: preview-indexer-lock-
+
+      - name: Check and Set Lock
+        run: |
+          mkdir -p preview-indexer/lock
+          
+          # Check
+          if [ -f preview-indexer/lock/indexer.json ]; then
+            echo "Lock file exists. Another indexer is running. Exiting."
+            exit 1
+          fi
+          
+          # Create new lock
+          echo "locked" > preview-indexer/lock/indexer.json
+          echo "Lock set."
+
+      - name: Save lock cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: preview-indexer/lock/indexer.json
+          key: preview-indexer-lock-${{ github.run_id }}
+      # LOCKING LOGIC ENDS
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
