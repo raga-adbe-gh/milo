@@ -37,6 +37,12 @@ jobs:
   preview-indexer-full:
     runs-on: ubuntu-latest
     steps:
+      - name: Check Lock
+        if: env.ACT != 'true'
+        run: |
+          LOCK=$(gh variable get PREVIEW_INDEXER_RUNNING)
+          if [ "$PREVIEW_INDEXER_RUNNING" = "1" ]; then exit 1; fi
+
       - name: Check if previous run is in progress
         id: check-run
         run: |
