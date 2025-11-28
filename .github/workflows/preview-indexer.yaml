@@ -54,23 +54,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Set preview indexer for full lock
-        if: env.ACT != 'true'
-        run: |
-          gh variable set PREVIEW_INDEXER_RUNNING --body "1"
-
       - name: Restore cached state
         id: cache-restore
         uses: actions/cache@v4
         with:
-          path: preview-indexer/state/last-runs.json
-          key: preview-indexer-last-runs-${{ github.run_id }}
+          path: preview-indexer/state/
+          key: preview-indexer-state-${{ github.run_id }}
           restore-keys: |
-            preview-indexer-last-runs-
+            preview-indexer-state-
 
-      - name: Initialize file if missing
+      - name: Check if lock exists
         run: |
           mkdir -p preview-indexer/state
+          if [ -f preview-indexer/state/lock.txt ]; then
+            echo "Lock file exists. Another indexer is running. Exiting."
+            exit 1
+          fi
+          echo "No lock found. Proceeding."
+
+      - name: Set lock
+        run: |
+          echo "locked" > preview-indexer/state/lock.txt
+
+      - name: Initialize state file if missing
+        run: |
           if [ ! -f preview-indexer/state/last-runs.json ]; then
             echo "{}" > preview-indexer/state/last-runs.json
           fi
@@ -91,14 +98,14 @@ jobs:
           SITE: ${{ github.event.inputs.site }}
           SITE_REGION_PATHS: ${{ github.event.inputs.siteRegionPaths }}
 
+      - name: Release lock
+        if: always()
+        run: |
+          rm -f preview-indexer/state/lock.txt
+
       - name: Save updated cache
         if: always()
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
-          path: preview-indexer/state/last-runs.json
-          key: preview-indexer-last-runs-${{ github.run_id }}
-
-      - name: Unlock preview indexer for full lock
-        if: env.ACT != 'true'
-        run: |
-          gh variable set PREVIEW_INDEXER_RUNNING --body "0"
+          path: preview-indexer/state/
+          key: preview-indexer-state-${{ github.run_id }}

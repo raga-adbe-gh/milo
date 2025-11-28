@@ -40,11 +40,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Check Lock
-        if: env.ACT != 'true'
+      - name: Restore cached state
+        id: cache-restore
+        uses: actions/cache@v4
+        with:
+          path: preview-indexer/state/
+          key: preview-indexer-state-check-${{ github.run_id }}
+          restore-keys: |
+            preview-indexer-state-
+
+      - name: Check if lock exists
         run: |
-          LOCK=$(gh variable get PREVIEW_INDEXER_RUNNING)
-          if [ "$PREVIEW_INDEXER_RUNNING" = "1" ]; then exit 1; fi
+          mkdir -p preview-indexer/state
+          if [ -f preview-indexer/state/lock.txt ]; then
+            echo "Lock file exists. Another indexer is running. Exiting."
+            exit 1
+          fi
+          echo "No lock found. Proceeding."
+
+      - name: Set lock
+        run: |
+          echo "locked" > preview-indexer/state/lock.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -59,3 +75,15 @@ jobs:
         env:
           SITE: ${{ github.event.inputs.site }}
           SITE_REGION_PATHS: ${{ github.event.inputs.siteRegionPaths }}
+
+      - name: Release lock
+        if: always()
+        run: |
+          rm -f preview-indexer/state/lock.txt
+
+      - name: Save updated cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: preview-indexer/state/
+          key: preview-indexer-state-check-${{ github.run_id }}
