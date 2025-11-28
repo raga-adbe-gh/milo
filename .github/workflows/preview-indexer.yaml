@@ -57,8 +57,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock-${{ github.run_id }}
-          restore-keys: preview-indexer-lock-
+          key: preview-indexer-lock
+          restore-keys: preview-indexer-lock
 
       - name: Check and Set Lock
         run: |
@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock-${{ github.run_id }}
+          key: preview-indexer-lock
       # LOCKING LOGIC ENDS
 
       - name: Checkout repository
@@ -148,5 +148,5 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock-${{ github.run_id }}
+          key: preview-indexer-lock
       # RELEASING LOCK ENDS

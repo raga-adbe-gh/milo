@@ -43,8 +43,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock-${{ github.run_id }}
-          restore-keys: preview-indexer-lock-
+          key: preview-indexer-lock
+          restore-keys: preview-indexer-lock
 
       - name: Check and Set Lock
         run: |
