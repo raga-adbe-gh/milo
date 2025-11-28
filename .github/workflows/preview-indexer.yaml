@@ -129,14 +129,23 @@ jobs:
           SITE: ${{ github.event.inputs.site }}
           SITE_REGION_PATHS: ${{ github.event.inputs.siteRegionPaths }}
 
+      - name: Save updated cache
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: preview-indexer/state/last-runs.json
+          key: preview-indexer-last-runs-${{ github.run_id }}
+
+      # RELEASING LOCK BEGINS
       - name: Release lock
         if: always()
         run: |
-          rm -f preview-indexer/state/lock.txt
+          rm -f preview-indexer/lock/indexer.json
 
       - name: Save updated cache
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: preview-indexer/state/
-          key: preview-indexer-state-${{ github.run_id }}
+          path: preview-indexer/lock/indexer.json
+          key: preview-indexer-lock-${{ github.run_id }}
+      # RELEASING LOCK ENDS
