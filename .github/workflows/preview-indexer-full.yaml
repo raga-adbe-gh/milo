@@ -52,12 +52,13 @@ jobs:
           
           # Check
           if [ -f preview-indexer/lock/indexer.txt ]; then
+            cat preview-indexer/lock/indexer.txt 
             echo "Lock file exists. Another indexer is running. Exiting."
             exit 1
           fi
           
           # Create new lock
-          echo "locked" > preview-indexer/lock/indexer.txt
+          echo "locked ${{ github.run_id }}" > preview-indexer/lock/indexer.txt
           echo "Lock set."
 
       - name: Save lock cache
