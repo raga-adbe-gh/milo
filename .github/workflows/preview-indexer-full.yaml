@@ -119,5 +119,5 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock-${{ github.run_id }}
+          key: preview-indexer-lock
       # RELEASING LOCK ENDS
