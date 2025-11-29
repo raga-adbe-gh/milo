@@ -38,6 +38,9 @@ jobs:
   preview-indexer-full:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
       - name: Check preview indexer
         if: ${{ env.ACT != 'true' }}
         id: running
@@ -51,9 +54,6 @@ jobs:
             echo "Another Preview Indexer run is active — exiting."
             exit 1
           fi
-
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Restore cached state
         id: cache-restore
