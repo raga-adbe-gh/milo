@@ -64,19 +64,6 @@ jobs:
           restore-keys: |
             preview-indexer-state-
 
-      - name: Check if lock exists
-        run: |
-          mkdir -p preview-indexer/state
-          if [ -f preview-indexer/state/lock.txt ]; then
-            echo "Lock file exists. Another indexer is running. Exiting."
-            exit 1
-          fi
-          echo "No lock found. Proceeding."
-
-      - name: Set lock
-        run: |
-          echo "locked" > preview-indexer/state/lock.txt
-
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
