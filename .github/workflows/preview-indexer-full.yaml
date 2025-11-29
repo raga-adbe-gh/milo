@@ -13,8 +13,12 @@ on:
         required: false
         type: string
 
+concurrency:
+  group: preview-indexer-run
+  cancel-in-progress: false
+
 permissions:
-  actions: write
+  actions: read
   contents: write
 
 env:
