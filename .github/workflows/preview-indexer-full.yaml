@@ -1,4 +1,5 @@
-name: Generate Full Preview Index For DA Tenant Regional Path
+name: Preview Index (Full)
+description: This workflow generates the preview index for the given site and region(s)
 
 on:
   workflow_dispatch:
@@ -37,37 +38,19 @@ jobs:
   preview-indexer-full:
     runs-on: ubuntu-latest
     steps:
-      # LOCKING LOGIC BEINGS
-      - name: Restore lock cache
-        id: cache-restore-lock
-        uses: actions/cache@v4
-        with:
-          path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock
-          restore-keys: preview-indexer-lock
-
-      - name: Check and Set Lock
+      - name: Check preview indexer
+        if: ${{ env.ACT != 'true' }}
+        id: running
         run: |
-          mkdir -p preview-indexer/lock
-          
-          # Check
-          if [ -f preview-indexer/lock/indexer.txt ]; then
-            cat preview-indexer/lock/indexer.txt 
-            echo "Lock file exists. Another indexer is running. Exiting."
+          count=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs \
+            --jq '.workflow_runs | map(select(.name|contains("Preview Indexer") and (.status=="in_progress" or .status=="queued"))) | length')
+
+          echo "count=$count" >> $GITHUB_OUTPUT
+
+          if [ "$count" -ne 0 ]; then
+            echo "Another Preview Indexer run is active — exiting."
             exit 1
           fi
-          
-          # Create new lock
-          echo "locked ${{ github.run_id }}" > preview-indexer/lock/indexer.txt
-          echo "Lock set."
-
-      - name: Save lock cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock-${{ github.run_id }}
-      # LOCKING LOGIC ENDS
 
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -107,17 +90,3 @@ jobs:
         env:
           SITE: ${{ github.event.inputs.site }}
           SITE_REGION_PATHS: ${{ github.event.inputs.siteRegionPaths }}
-
-      # RELEASING LOCK BEGINS
-      - name: Release lock
-        if: always()
-        run: |
-          rm -f preview-indexer/lock/indexer.txt
-
-      - name: Save updated cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock
-      # RELEASING LOCK ENDS

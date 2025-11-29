@@ -1,4 +1,5 @@
-name: Generate/Updates Preview Index For DA Tenants
+name: Preview Index (Incremental)
+description: This workflow updates the preview index for the given site and region(s)
 
 on:
   schedule:
@@ -51,38 +52,6 @@ jobs:
     if: github.repository_owner == 'raga-adbe-gh'
     runs-on: ubuntu-latest
     steps:
-      # LOCKING LOGIC BEINGS
-      - name: Restore lock cache
-        id: cache-restore-lock
-        uses: actions/cache@v4
-        with:
-          path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock
-          restore-keys: preview-indexer-lock
-
-      - name: Check and Set Lock
-        run: |
-          mkdir -p preview-indexer/lock
-          
-          # Check
-          if [ -f preview-indexer/lock/indexer.txt ]; then
-            cat preview-indexer/lock/indexer.txt 
-            echo "Lock file exists. Another indexer is running. Exiting."
-            exit 1
-          fi
-          
-          # Create new lock
-          echo "locked ${{ github.run_id }}" > preview-indexer/lock/indexer.txt
-          echo "Lock set."
-
-      - name: Save lock cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock
-      # LOCKING LOGIC ENDS
-
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -94,19 +63,6 @@ jobs:
           key: preview-indexer-state-${{ github.run_id }}
           restore-keys: |
             preview-indexer-state-
-
-      - name: Check if lock exists
-        run: |
-          mkdir -p preview-indexer/state
-          if [ -f preview-indexer/state/lock.txt ]; then
-            echo "Lock file exists. Another indexer is running. Exiting."
-            exit 1
-          fi
-          echo "No lock found. Proceeding."
-
-      - name: Set lock
-        run: |
-          echo "locked" > preview-indexer/state/lock.txt
 
       - name: Initialize state file if missing
         run: |
@@ -136,17 +92,3 @@ jobs:
         with:
           path: preview-indexer/state/last-runs.json
           key: preview-indexer-last-runs-${{ github.run_id }}
-
-      # RELEASING LOCK BEGINS
-      - name: Release lock
-        if: always()
-        run: |
-          rm -f preview-indexer/lock/indexer.txt
-
-      - name: Save updated cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: preview-indexer/lock/indexer.txt
-          key: preview-indexer-lock
-      # RELEASING LOCK ENDS
