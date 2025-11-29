@@ -46,7 +46,7 @@ jobs:
         id: running
         run: |
           count=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs \
-            --jq '.workflow_runs | map(select(.name|contains("Preview Indexer") and (.status=="in_progress" or .status=="queued"))) | length')
+            --jq '.workflow_runs | map(select((.name | type == "object" and .name.name == "Preview Indexer (Full)") or (.name == "Preview Indexer (Full)")) | select(.status=="in_progress" or .status=="queued")) | length')
 
           echo "count=$count" >> $GITHUB_OUTPUT
 
