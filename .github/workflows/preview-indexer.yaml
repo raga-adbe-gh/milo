@@ -1,4 +1,4 @@
-name: Preview Index (Incremental)
+name: Preview Indexer (Incremental)
 description: This workflow updates the preview index for the given site and region(s)
 
 on:
