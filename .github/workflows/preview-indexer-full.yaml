@@ -45,20 +45,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Check preview indexer
-        if: ${{ env.ACT != 'true' }}
-        id: running
-        run: |
-          count=$(gh api repos/${GITHUB_REPOSITORY}/actions/runs \
-            --jq '.workflow_runs | map(select((.name | type == "object" and .name.name == "Preview Indexer (Full)") or (.name == "Preview Indexer (Full)")) | select(.status=="in_progress" or .status=="queued")) | length')
-
-          echo "count=$count" >> $GITHUB_OUTPUT
-
-          if [ "$count" -ne 0 ]; then
-            echo "Another Preview Indexer run is active — exiting."
-            exit 1
-          fi
-
       - name: Restore cached state
         id: cache-restore
         uses: actions/cache@v4
