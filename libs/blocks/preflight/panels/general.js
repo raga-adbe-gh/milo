@@ -112,16 +112,41 @@ function getUrl(el) {
 }
 
 function findLinks(selector) {
+  const sourceUrl = window.location.href;
+  const locale = extractLocaleFromUrl(sourceUrl);
   const hrefs = new Set();
+  
   return [...document.body.querySelectorAll(selector)]
     .reduce((links, el) => {
       const url = getUrl(el);
-      const linkText = el.textContent?.trim() || el.alt || el.title || '';
       const baseUrl = `${url.origin}${url.pathname}`;
       if (EXCLUDED_PATHS.some((path) => url.pathname.includes(path))) return links;
       if (!hrefs.has(baseUrl)) {
         hrefs.add(baseUrl);
-        links.push({ url, edit: null, preview: 'Fetching', live: 'Fetching', linkText });
+        
+
+        const linkText = el.textContent?.trim() || 
+                        el.alt || 
+                        el.title || 
+                        '';
+        
+        const tagType = getTagType(el);
+        const position = getElementPosition(el);
+        const visibility = isElementVisible(el) ;
+        
+        links.push({ 
+          url, 
+          edit: null, 
+          preview: 'Fetching', 
+          live: 'Fetching',
+          sourceUrl: sourceUrl,
+          locale: locale,
+          brokenLink: url.href,
+          tagType: tagType,
+          position: position,
+          linkTextOrImgAlt: linkText,
+          visibility: visibility,        
+        });
       }
       return links;
     }, []);
