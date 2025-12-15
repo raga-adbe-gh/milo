@@ -116,11 +116,12 @@ function findLinks(selector) {
   return [...document.body.querySelectorAll(selector)]
     .reduce((links, el) => {
       const url = getUrl(el);
+      const linkText = el.textContent?.trim() || el.alt || el.title || '';
       const baseUrl = `${url.origin}${url.pathname}`;
       if (EXCLUDED_PATHS.some((path) => url.pathname.includes(path))) return links;
       if (!hrefs.has(baseUrl)) {
         hrefs.add(baseUrl);
-        links.push({ url, edit: null, preview: 'Fetching', live: 'Fetching' });
+        links.push({ url, edit: null, preview: 'Fetching', live: 'Fetching', linkText });
       }
       return links;
     }, []);
