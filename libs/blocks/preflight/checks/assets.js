@@ -20,11 +20,9 @@ function loadVideo(asset) {
 
   return new Promise((resolve) => {
     if (!asset.querySelector('source')) {
-      const videoSource = asset.getAttribute('data-video-source');
-      if (!videoSource) return resolve();
       asset.appendChild(createTag('source', { src: asset.getAttribute('data-video-source'), type: 'video/mp4' }));
     }
-    ['loadedmetadata', 'error'].forEach((evt) => asset.addEventListener(evt, resolve, { once: true }));
+    ['loadedmetadata', 'error', 'stalled', 'abort'].forEach((evt) => asset.addEventListener(evt, resolve, { once: true }));
     asset.load();
   });
 }
