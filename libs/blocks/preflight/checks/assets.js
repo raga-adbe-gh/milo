@@ -3,6 +3,7 @@ import { createTag } from '../../../utils/utils.js';
 import { displayPreflightVisuals } from '../visual-metadata.js';
 
 const maxFullWidth = 1920;
+const waitVideoLoadTimeout = 10000;
 
 export function loadImage(asset) {
   if (asset.complete) return Promise.resolve();
@@ -19,11 +20,26 @@ function loadVideo(asset) {
     && asset.videoWidth > 0) return Promise.resolve();
 
   return new Promise((resolve) => {
+    let isResolved = false;
+    const resolvePromise = () => {
+      if (!isResolved) {
+        isResolved = true;
+        resolve();
+      }
+    };
     if (!asset.querySelector('source')) {
-      asset.appendChild(createTag('source', { src: asset.getAttribute('data-video-source'), type: 'video/mp4' }));
+      const videoSource = asset.getAttribute('data-video-source');
+      if (!videoSource) {
+        resolvePromise();
+      } else {
+        asset.appendChild(createTag('source', { src: videoSource, type: 'video/mp4' }));
+      }
     }
-    ['loadedmetadata', 'error', 'stalled', 'abort'].forEach((evt) => asset.addEventListener(evt, resolve, { once: true }));
-    asset.load();
+    if (!isResolved) {
+      ['loadedmetadata', 'error'].forEach((evt) => asset.addEventListener(evt, resolvePromise, { once: true }));
+      asset.load();
+      setTimeout(resolvePromise, waitVideoLoadTimeout);
+    }
   });
 }
 
