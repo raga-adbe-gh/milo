@@ -172,7 +172,7 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap, datalayer) => {
       // Remove the redirect paths from the preview index
       previewIndex.data = previewIndex.data
         .filter((item) => !redirectPaths.find((path) => path.startsWith(rootPath) && item.Path.startsWith(path)))
-        .filter((item) => !redirectFolders.find((fldr) => fldr.startsWith(rootPath) && item.Path.startsWith(fldr)).length);
+        .filter((item) => !redirectFolders.find((fldr) => fldr.startsWith(rootPath) && item.Path.startsWith(fldr)));
       const { length } = previewIndex.data;
       previewIndex = { ...previewIndex, total: length, limit: length };
       const result = await datalayer.savePreviewIndexJson(siteOrg, siteRepo, `${previewIndexPath}${config.getPreviewFileExtension()}`, previewIndex);
