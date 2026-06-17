@@ -1,6 +1,6 @@
 import { createAxiosWithRetry } from './utils.js';
 
-const  MAX_REDIRECT_ENTRIES = 999999;
+const MAX_REDIRECT_ENTRIES = 999999;
 
 const axiosWithRetry = createAxiosWithRetry();
 
