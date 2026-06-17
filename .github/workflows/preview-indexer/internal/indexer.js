@@ -1,5 +1,5 @@
 // node --env-file=.env .github/workflows/preview-indexer/incremental.js (node >= 21)
-import { fetchLogsForSite, getSiteEnvKey, triggerPreview, getPreviewPathsForRegion } from './helix-client.js';
+import { fetchLogsForSite, getSiteEnvKey, triggerPreview, getPreviewPathsForRegion, getRedirects } from './helix-client.js';
 import { getLastRunInfo, saveLastRuns } from './indexer-state.js';
 import SiteConfig from './site-config.js';
 
@@ -33,6 +33,8 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap, datalayer) => {
   // Initialize site configuration
   const config = SiteConfig(siteOrg, siteRepo, lingoConfigMap);
   const orgWithRepo = getSiteEnvKey(siteOrg, siteRepo);
+  const redirects = await getRedirects(siteOrg, siteRepo);
+  console.log(`Redirects found are ${redirects.length}`);
 
   function getISOSinceXDaysAgo(days) {
     const now = new Date();

@@ -188,4 +188,20 @@ async function getPreviewPathsForRegion(siteOrg, siteRepo, regionPath) {
   throw new Error(`Job not stopped: ${job.links.self}`);
 }
 
-export { getSiteEnvKey, fetchLogsForSite, triggerPreview, getPreviewPathsForRegion };
+async function getRedirects(siteOrg, siteRepo) {
+  const adminTokenKey = getSiteEnvKey(siteOrg, siteRepo, 'AEM_ADMIN_TOKEN_');
+  const adminToken = process.env[adminTokenKey];
+  const url = `https://main--${siteRepo}--${siteOrg}.aem.page/redirects.json?limit=999999`;
+  const response = await axiosWithRetryError({
+    method: 'GET',
+    url,
+    headers: { Authorization: `token ${adminToken}` }
+  });
+  if (response.status !== 200) {
+    console.error(`Failed to fetch redirects: ${response.status} ${response.statusText}`);
+    return [];
+  } 
+  return response.data?.data?.map(item => item.Source) || [];
+}
+
+export { getSiteEnvKey, fetchLogsForSite, triggerPreview, getPreviewPathsForRegion, getRedirects };
