@@ -54,7 +54,12 @@ export async function getLingoConfigMap() {
     return {};
   }
   try {
-    const lingoConfig = await axiosWithRetry.get(LINGO_CONFIG, { headers: { 'Content-Type': 'application/json' } });
+    const options = { headers: { 'Content-Type': 'application/json' } };
+    if (LINGO_CONFIG.includes('aem.page')) {
+      const federalToken = process.env.AEM_ADMIN_TOKEN_ADOBECOM_FEDERAL;
+      options.headers['Authorization'] = `token ${federalToken}`;
+    }
+    const lingoConfig = await axiosWithRetry.get(LINGO_CONFIG, options);
     const lingoConfigMap = {};
     const siteLocalesData = lingoConfig?.data?.['site-locales']?.data;
     if (siteLocalesData && Array.isArray(siteLocalesData)) {
