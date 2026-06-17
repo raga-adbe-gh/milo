@@ -1,5 +1,7 @@
 import { createAxiosWithRetry } from './utils.js';
 
+const  MAX_REDIRECT_ENTRIES = 999999;
+
 const axiosWithRetry = createAxiosWithRetry();
 
 const axiosWithRetryError = async (request) => {
@@ -191,19 +193,13 @@ async function getPreviewPathsForRegion(siteOrg, siteRepo, regionPath) {
 async function getRedirects(siteOrg, siteRepo) {
   const adminTokenKey = getSiteEnvKey(siteOrg, siteRepo, 'AEM_ADMIN_TOKEN_');
   const adminToken = process.env[adminTokenKey];
-  const url = `https://main--${siteRepo}--${siteOrg}.aem.page/redirects.json?limit=999999`;
+  const url = `https://main--${siteRepo}--${siteOrg}.aem.page/redirects.json?limit=${MAX_REDIRECT_ENTRIES}`;
   try {
     const response = await axiosWithRetryError({
       method: 'GET',
       url,
       headers: { Authorization: `token ${adminToken}` }
     });
-
-    if (response.status !== 200) {
-      console.error(`Failed to fetch redirects: ${response.status} ${response.statusText}`);
-      return [];
-    }
-
     return response.data?.data?.map(item => item.Source) || [];
   } catch (error) {
     const status = error.status || error.response?.status;

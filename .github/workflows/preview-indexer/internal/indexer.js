@@ -34,15 +34,6 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap, datalayer) => {
   const config = SiteConfig(siteOrg, siteRepo, lingoConfigMap);
   const orgWithRepo = getSiteEnvKey(siteOrg, siteRepo);
   const pathExtn = config.getPreviewPathExtension();
-  const redirectPaths = [];
-  const redirectFolders = [];
-  for (const redirectEntry of await getRedirects(siteOrg, siteRepo)) {
-    if (redirectEntry.endsWith('*')) {
-      redirectFolders.push(redirectEntry.slice(0, -1));
-    } else {
-      redirectPaths.push(`${redirectEntry}${pathExtn}`);
-    }
-  }
 
   function getISOSinceXDaysAgo(days) {
     const now = new Date();
@@ -137,6 +128,16 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap, datalayer) => {
       return;
     }
 
+    const redirectPaths = [];
+    const redirectFolders = [];
+    for (const redirectEntry of await getRedirects(siteOrg, siteRepo)) {
+      if (redirectEntry.endsWith('*')) {
+        redirectFolders.push(redirectEntry.slice(0, -1));
+      } else {
+        redirectPaths.push(`${redirectEntry}${pathExtn}`);
+      }
+    }
+
     const unpreviewPaths = await getUnpreviewPaths(entries);
     const filteredUnpreviewPaths = getFilteredPaths(unpreviewPaths);
 
@@ -170,8 +171,8 @@ const initIndexer = async (siteOrg, siteRepo, lingoConfigMap, datalayer) => {
       }
       // Remove the redirect paths from the preview index
       previewIndex.data = previewIndex.data
-        .filter((item) => !redirectPaths.filter((path) => path.startsWith(rootPath) && item.Path.startsWith(path)).length > 0)
-        .filter((item) => !redirectFolders.filter((fldr) => fldr.startsWith(rootPath) && item.Path.startsWith(fldr)).length > 0);
+        .filter((item) => !redirectPaths.filter((path) => path.startsWith(rootPath) && item.Path.startsWith(path)).length)
+        .filter((item) => !redirectFolders.filter((fldr) => item.Path.startsWith(fldr)).length);
       const { length } = previewIndex.data;
       previewIndex = { ...previewIndex, total: length, limit: length };
       const result = await datalayer.savePreviewIndexJson(siteOrg, siteRepo, `${previewIndexPath}${config.getPreviewFileExtension()}`, previewIndex);
