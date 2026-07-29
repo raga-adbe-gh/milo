@@ -1,13 +1,25 @@
-import { getConfig, getLanguage, getLocale, loadLanguageConfig } from '../../utils/utils.js';
+import {
+  getConfig,
+  getLanguage,
+  getLocale,
+  loadLanguageConfig,
+  setInternational,
+  getCountry,
+  setMarket,
+  createTag,
+} from '../../utils/utils.js';
+import { norm } from '../../utils/market.js';
+
+let config;
+
+// Commerce geo-expansion markets: no adobe.com site; picker only sets the country
+// cookie and routes to US site
+const GEO_EXPANSION_MARKETS = new Set([
+  'mu', 'ke', 'gh', 'tz', 'am', 'az', 'ge', 'md', 'kz', 'kg', 'tj',
+  'tm', 'uz', 'tn', 'om', 'ma', 'lb', 'jo', 'iq', 'dz', 'bh',
+]);
 
 const queriedPages = [];
-
-function setInternational(prefix) {
-  const domain = window.location.host.endsWith('.adobe.com') ? 'domain=adobe.com' : '';
-  const maxAge = 365 * 24 * 60 * 60; // max-age in seconds for 365 days
-  document.cookie = `international=${prefix};max-age=${maxAge};path=/;${domain}`;
-  sessionStorage.setItem('international', prefix);
-}
 
 function handleEvent({ prefix, link, callback } = {}) {
   if (typeof callback !== 'function') return;
@@ -48,22 +60,35 @@ export function decorateLink(link, path, localeToLanguageMap = []) {
     ? getLanguage(languages, mergedLocales, pathname) : getLocale(mergedLocales, pathname);
   const prefix = currentLocaleObj.prefix.replace('/', '');
 
+  const geoSegment = pathname.split('/')[1]?.toLowerCase();
+  const geoMarket = GEO_EXPANSION_MARKETS.has(geoSegment) ? geoSegment : null;
+
   let { href } = link;
   if (href.endsWith('/')) href = href.slice(0, -1);
 
-  if (languageMap && !locales[prefix] && (languages && !languages[prefix])) {
+  if (geoMarket) {
+    href = href.replace(`/${geoMarket}`, '');
+  } else if (languageMap && !locales[prefix] && (languages && !languages[prefix])) {
     const valueInMap = languageMap[prefix];
     href = href.replace(`/${prefix}`, valueInMap ? `/${valueInMap}` : '');
   }
   link.href = `${href}${path}`;
-
+  if (currentLocaleObj.ietf && currentLocaleObj.ietf !== 'none') link.setAttribute('lang', currentLocaleObj.ietf);
   link.addEventListener('mouseover', () => {
     setTimeout(() => {
       if (link.matches(':hover') && !hrefAdapted) {
         handleEvent({
           prefix,
           link,
-          callback: (newHref) => {
+          callback: async (newHref) => {
+            if (config.lingoProjectSuccessLogging === 'on') {
+              const country = await getCountry();
+              window.lana.log(`Click: Region_Nav_Modal|locale:${config.locale.prefix?.replace('/', '') || 'us'}|country:${country}`, {
+                sampleRate: 10,
+                tags: 'lingo,lingo-region-nav-click',
+                severity: 'i',
+              });
+            }
             link.href = newHref;
             hrefAdapted = true;
           },
@@ -74,12 +99,23 @@ export function decorateLink(link, path, localeToLanguageMap = []) {
 
   link.addEventListener('click', (e) => {
     setInternational(prefix === '' ? 'us' : prefix);
+    const resolved = geoMarket || norm(prefix) || 'us';
+    const market = resolved === 'la' ? 'latam' : resolved; // TODO: remove this fallback after ACOM consumes market-selector
+    if (market) setMarket(market);
     if (hrefAdapted) return;
     e.preventDefault();
     handleEvent({
       prefix,
       link,
-      callback: (newHref) => {
+      callback: async (newHref) => {
+        if (config.lingoProjectSuccessLogging === 'on') {
+          const country = await getCountry();
+          window.lana.log(`Click: Region_Nav_Modal|locale:${config.locale.prefix?.replace('/', '') || 'us'}|country:${country}`, {
+            sampleRate: 10,
+            tags: 'lingo,lingo-region-nav-click',
+            severity: 'i',
+          });
+        }
         window.open(newHref, e.ctrlKey || e.metaKey ? '_blank' : '_self');
       },
     });
@@ -88,9 +124,26 @@ export function decorateLink(link, path, localeToLanguageMap = []) {
 
 export default async function init(block) {
   const { localeToLanguageMap } = await loadLanguageConfig();
-  const config = getConfig();
+  config = getConfig();
   const divs = block.querySelectorAll(':scope > div');
   if (divs.length < 2) return;
+  const titleDiv = divs[0];
+  if (!titleDiv.querySelector('h2')) {
+    const titleStrong = titleDiv.querySelector('strong');
+    const titleP = titleStrong ? titleStrong.closest('p') : titleDiv.querySelector('p');
+    if (titleP) {
+      const h2 = createTag('h2', { class: 'tracking-header' }, titleP.textContent.trim());
+      titleP.replaceWith(h2);
+    }
+  }
+  const regionHeaders = divs[1].querySelectorAll(':scope > div > p > strong');
+  regionHeaders.forEach((strong) => {
+    if (strong.querySelector('a')) return;
+    const p = strong.parentElement;
+    if (p.nextElementSibling?.tagName !== 'UL') return;
+    const h3 = createTag('h3', { class: `tracking-header ${strong.className}`.trim() }, strong.textContent);
+    p.replaceWith(h3);
+  });
   const links = divs[1].querySelectorAll('a');
   if (!links.length) return;
   const { prefix } = config.locale;
@@ -98,4 +151,8 @@ export default async function init(block) {
   const hasPrefix = location.pathname.startsWith(`${prefix}/`);
   const path = location.href.replace(location.origin + (hasPrefix ? prefix : ''), '').replace('#langnav', '');
   links.forEach((link) => decorateLink(link, path, localeToLanguageMap));
+  if (config.lingoProjectSuccessLogging === 'on') {
+    const country = await getCountry();
+    window.lana.log(`Load: Region_Nav_Modal|locale:${config.locale.prefix?.replace('/', '') || 'us'}|country:${country}`, { sampleRate: 10, tags: 'lingo,lingo-region-nav-load', severity: 'i' });
+  }
 }

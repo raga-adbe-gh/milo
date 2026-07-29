@@ -21,20 +21,33 @@ function addLoader(a) {
   return container;
 }
 
+function getLocale(loc) {
+  const ietf = loc?.ietf?.toLowerCase();
+  const region = loc?.region?.toLowerCase();
+  if (ietf && ietf.includes('-')) return ietf;
+  if (ietf && region) return `${ietf}-${region}`;
+  return ietf;
+}
+
 async function decorateQuickLink(a, hasConsent, isNewTab) {
+  const { locale } = getConfig();
   let ecid = null;
+  const urlObj = new URL(a.href, window.location.origin);
   try {
     const data = await window.alloy_getIdentity;
     ecid = data?.identity?.ECID;
   } catch (e) {
-    window.lana.log(`Error fetching ECID: ${e}`, { tags: 'branch-quick-links' });
+    window.lana.log(`Error fetching ECID: ${e}`, { tags: 'branch-quick-links', severity: 'error' });
   }
   if (ecid && hasConsent && !a.href.includes('ecid')) {
-    const urlObj = new URL(a.href, window.location.origin);
     urlObj.searchParams.set('ecid', ecid);
-    a.href = urlObj.href;
   }
-  if (isNewTab) window.open(a.href, '_blank');
+  const loc = getLocale(locale);
+  if (loc) urlObj.searchParams.append('~sub_site_name', loc);
+  const blockName = a.closest('[data-block-status="loaded"]')?.classList[0];
+  if (blockName) urlObj.searchParams.append('~placement', blockName);
+  a.href = urlObj.href;
+  if (isNewTab) window.open(a.href, '_blank', 'noopener');
   else window.location.href = a.href;
 }
 
@@ -73,7 +86,7 @@ export default function processQuickLink(a) {
     if (getMetadata('quick-link-loader') === 'on') loader = addLoader(a);
     const hasConsent = await waitForConsent();
     if (loader) loader.replaceWith(a);
-    const isNewTab = (e.metaKey || e.ctrlKey);
+    const isNewTab = (e.metaKey || e.ctrlKey || a.getAttribute('target') === '_blank');
     decorateQuickLink(a, hasConsent, isNewTab);
   });
 }

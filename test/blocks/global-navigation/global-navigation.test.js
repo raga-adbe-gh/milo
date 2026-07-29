@@ -9,7 +9,6 @@ import {
   mockRes,
   viewports,
   unavLocalesTestData,
-  analyticsTestData,
   unavVersion,
   addMetaDataV2,
 } from './test-utilities.js';
@@ -68,7 +67,7 @@ describe('global navigation', () => {
         },
       });
 
-      expect(window.lana.log.getCalls().find((c) => c.args[0].includes('Error with IMS'))).to.exist;
+      expect(window.lana.log.getCalls().find((c) => c.args[0]?.includes('Error with IMS'))).to.exist;
     });
 
     it('should send log when sign in link is not found', async () => {
@@ -131,6 +130,47 @@ describe('global navigation', () => {
       };
       await gnav.decorateProfile();
       expect(window.lana.log.getCalls().find((c) => c.args[0].includes('decorateProfile has failed to fetch profile data'))).to.exist;
+    });
+  });
+
+  describe('reloadProfile / window.feds.nav.reload', () => {
+    afterEach(() => {
+      sinon.restore();
+      delete window.feds;
+    });
+
+    it('should expose window.feds.nav.reload when feds profile is active', async () => {
+      await createFullGlobalNavigation();
+      expect(window.feds?.nav?.reload).to.be.a('function');
+    });
+
+    it('should not expose window.feds.nav.reload when UniversalNav is active', async () => {
+      await createFullGlobalNavigation({ unavContent: 'on' });
+      expect(window.feds?.nav?.reload).to.be.undefined;
+    });
+
+    it('should re-render the profile after reload', async () => {
+      const gnav = await createFullGlobalNavigation();
+      window.adobeIMS = { isSignedInUser: () => true, getAccessToken: () => ({ token: 'mock-token' }) };
+      sinon.stub(window, 'fetch').callsFake((url) => {
+        if (url.includes('/profile')) return mockRes({ payload: { sections: {}, user: { avatar: '' } } });
+        return null;
+      });
+      const decorateProfileSpy = sinon.spy(gnav, 'decorateProfile');
+      await gnav.reloadProfile();
+      expect(decorateProfileSpy.calledOnce).to.be.true;
+    });
+
+    it('should cancel a pending decoration timeout on reload', async () => {
+      const gnav = await createFullGlobalNavigation();
+      window.adobeIMS = { isSignedInUser: () => false };
+      const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      let fired = false;
+      gnav.blocks.profile.decorationTimeout = setTimeout(() => { fired = true; }, 9999);
+      await gnav.reloadProfile();
+      clock.tick(10000);
+      clock.restore();
+      expect(fired).to.be.false;
     });
   });
 
@@ -418,12 +458,12 @@ describe('global navigation', () => {
       it('should render the Universal navigation', async () => {
         await createFullGlobalNavigation({ unavContent: 'on' });
         const unavFirstCallItems = window.UniversalNav.getCall(0).args[0]?.children;
-
+        // Check for profile component presence
         expect(unavFirstCallItems[0]?.name === 'profile' && !unavFirstCallItems[1]).to.be.true;
 
         await createFullGlobalNavigation({ unavContent: 'profile, appswitcher, notifications, help' });
         const unavSecondCallItems = window.UniversalNav.getCall(1).args[0]?.children;
-
+        // Check for all expected components
         expect(unavSecondCallItems.every((c) => ['profile', 'app-switcher', 'notifications', 'help'].includes(c.name)))
           .to.be.true;
       });
@@ -440,9 +480,10 @@ describe('global navigation', () => {
         // eslint-disable-next-line max-len
         const mockEvent = (name, payload) => ({ detail: { name, payload, executeDefaultAction: sinon.spy(() => Promise.resolve(null)) } });
         await createFullGlobalNavigation({ unavContent: 'on' });
+        // Find the messageEventListener in the new config structure
         const messageEventListener = window.UniversalNav.getCall(0).args[0].children
-          .map((c) => c.attributes.messageEventListener)
-          .find((listener) => listener);
+          .map((c) => c.attributes.accountMenuContext?.messageEventListener)
+          .find((listener) => typeof listener === 'function');
 
         const appInitiatedEvent = mockEvent('System', { subType: 'AppInitiated' });
         messageEventListener(appInitiatedEvent);
@@ -455,30 +496,6 @@ describe('global navigation', () => {
         const profileSwitch = mockEvent('System', { subType: 'ProfileSwitch' });
         messageEventListener(profileSwitch);
         expect(profileSwitch.detail.executeDefaultAction.called).to.be.true;
-      });
-
-      it('should send the correct analytics events', async () => {
-        await createFullGlobalNavigation({ unavContent: 'on' });
-        const analyticsFn = window.UniversalNav.getCall(0)
-          .args[0].analyticsContext.onAnalyticsEvent;
-
-        for (const [eventData, interaction] of Object.entries(analyticsTestData)) {
-          const [workflow, type, subtype, name] = eventData.split('|');
-          analyticsFn({ workflow, type, subtype, content: { name } });
-
-          // eslint-disable-next-line no-underscore-dangle
-          expect(window._satellite.track.lastCall.calledWith('event', {
-            xdm: {},
-            data: { web: { webInteraction: { name: interaction } } },
-          })).to.be.true;
-        }
-
-        expect(analyticsFn(null)).to.equal(undefined);
-        expect(analyticsFn({
-          event: { type: 'not', subtype: 'matching' },
-          source: { name: 'anything' },
-          content: { name: null },
-        })).to.equal(undefined);
       });
 
       it('should send/not send visitor guid to unav when window.alloy is available/unavailable', async () => {
@@ -516,10 +533,73 @@ describe('global navigation', () => {
 
       it('should pass enableProfileSwitcher to the profile component configuration', async () => {
         await createFullGlobalNavigation({ unavContent: 'on' });
+        // Find enableProfileSwitcher in the new config structure
         const profileConfig = window.UniversalNav.getCall(0).args[0].children
-          .find((c) => c.name === 'profile').attributes.componentLoaderConfig.config;
-
+          .find((c) => c.name === 'profile').attributes.accountMenuContext?.sharedContextConfig;
         expect(profileConfig.enableProfileSwitcher).to.be.true;
+      });
+
+      it('should set signInCtaStyle to secondary by default', async () => {
+        await createFullGlobalNavigation({ unavContent: 'on' });
+        const profileAttributes = window.UniversalNav.getCall(0).args[0].children
+          .find((c) => c.name === 'profile').attributes;
+        expect(profileAttributes.signInCtaStyle).to.equal('secondary');
+      });
+
+      it('should set signInCtaStyle to primary when meta tag is set to primary', async () => {
+        // Add meta tag for signin-cta-style
+        const metaTag = document.createElement('meta');
+        metaTag.name = 'signin-cta-style';
+        metaTag.content = 'primary';
+        document.head.appendChild(metaTag);
+
+        await createFullGlobalNavigation({ unavContent: 'on' });
+        const profileAttributes = window.UniversalNav.getCall(0).args[0].children
+          .find((c) => c.name === 'profile').attributes;
+        expect(profileAttributes.signInCtaStyle).to.equal('primary');
+
+        // Cleanup
+        document.head.removeChild(metaTag);
+      });
+
+      it('should set signInCtaStyle to primary when config is set to primary', async () => {
+        const customConfig = { unav: { profile: { signInCtaStyle: 'primary' } } };
+        await createFullGlobalNavigation({ unavContent: 'on', customConfig });
+        const profileAttributes = window.UniversalNav.getCall(0).args[0].children
+          .find((c) => c.name === 'profile').attributes;
+        expect(profileAttributes.signInCtaStyle).to.equal('primary');
+      });
+
+      it('should prioritize meta tag over config for signInCtaStyle', async () => {
+        // Add meta tag for signin-cta-style
+        const metaTag = document.createElement('meta');
+        metaTag.name = 'signin-cta-style';
+        metaTag.content = 'primary';
+        document.head.appendChild(metaTag);
+        const customConfig = { unav: { profile: { signInCtaStyle: 'secondary' } } };
+        await createFullGlobalNavigation({ unavContent: 'on', customConfig });
+        const profileAttributes = window.UniversalNav.getCall(0).args[0].children
+          .find((c) => c.name === 'profile').attributes;
+        expect(profileAttributes.signInCtaStyle).to.equal('primary');
+
+        // Cleanup
+        document.head.removeChild(metaTag);
+      });
+
+      it('should default to secondary for invalid signInCtaStyle values', async () => {
+        // Add meta tag with invalid value
+        const metaTag = document.createElement('meta');
+        metaTag.name = 'signin-cta-style';
+        metaTag.content = 'invalid';
+        document.head.appendChild(metaTag);
+
+        await createFullGlobalNavigation({ unavContent: 'on' });
+        const profileAttributes = window.UniversalNav.getCall(0).args[0].children
+          .find((c) => c.name === 'profile').attributes;
+        expect(profileAttributes.signInCtaStyle).to.equal('secondary');
+
+        // Cleanup
+        document.head.removeChild(metaTag);
       });
     });
 
@@ -663,7 +743,7 @@ describe('global navigation', () => {
     it('should load webapp prompt resources', async () => {
       document.head.innerHTML = `<meta name="app-prompt" content="on" />
       <meta name="app-prompt-entitlement" content="firefly-web-usage" />
-      <meta name="app-prompt-path" content="https://dismiss-pep--milo--adobecom.hlx.page/drafts/raghavs/pep-prompt-content"/>
+      <meta name="app-prompt-path" content="https://dismiss-pep--milo--adobecom.aem.page/drafts/raghavs/pep-prompt-content"/>
       <link rel="icon" href="/libs/img/favicons/favicon.ico" size="any" />
       <script src="https://auth.services.adobe.com/imslib/imslib.min.js" type="javascript/blocked" data-loaded="true"></script>
       <script src="https://stage.adobeccstatic.com/unav/${unavVersion}/UniversalNav.js" type="javascript/blocked" data-loaded="true"></script>
@@ -702,18 +782,28 @@ describe('global navigation', () => {
     });
   });
 
+  describe('Client whats new feature in global navigation', () => {
+    it('should append the feds-client-whatsnew div when whatsNew is on', async () => {
+      await createFullGlobalNavigation({ customConfig: { whatsNew: 'on' } });
+      expect(document.querySelector(selectors.topNav).querySelector('.feds-client-whatsnew')).to.exist;
+    });
+
+    it('should not append the feds-client-whatsnew div when whatsNew is not set', async () => {
+      await createFullGlobalNavigation({});
+      expect(document.querySelector(selectors.topNav).querySelector('.feds-client-whatsnew')).to.not.exist;
+    });
+  });
+
   describe('Product Entry CTA feature in global navigation', () => {
     it('should not append the feds-product-entry-cta class when product entry cta is disabled', async () => {
       document.head.innerHTML = '<meta name="product-entry-cta" content="off"/>';
-      const gnav = await createFullGlobalNavigation({ globalNavigation: productEntryCTA });
-      gnav.decorateProductEntryCTA();
+      await createFullGlobalNavigation({ globalNavigation: productEntryCTA });
       expect(document.querySelector(selectors.topNav).querySelector('.feds-cta-wrapper.feds-product-entry-cta')).to.not.exist;
     });
 
     it('should append the feds-product-entry-cta class when product entry cta is enabled', async () => {
       document.head.innerHTML = '<meta name="product-entry-cta" content="on" />';
-      const gnav = await createFullGlobalNavigation({ globalNavigation: productEntryCTA });
-      gnav.decorateProductEntryCTA();
+      await createFullGlobalNavigation({ globalNavigation: productEntryCTA });
       expect(document.querySelector(selectors.topNav).querySelector('.feds-cta-wrapper.feds-product-entry-cta')).to.exist;
     });
   });
@@ -752,6 +842,21 @@ describe('global navigation', () => {
       expect(!!localNav).to.be.true;
     });
 
+    it('renders a MAS field CTA after button decoration unwraps its authoring element', async () => {
+      const resolvedField = `
+        <div>
+          <p class="action-area">
+            <a is="checkout-link" class="con-button blue button-l" href="#free-trial">Free trial</a>
+          </p>
+        </div>`;
+      await createFullGlobalNavigation({ globalNavigation: `${gnavWithlocalNav}${resolvedField}` });
+
+      const freeTrial = [...document.querySelectorAll('.feds-nav .feds-cta--primary')]
+        .find((cta) => cta.textContent === 'Free trial');
+      expect(freeTrial).to.exist;
+      expect(freeTrial.href.endsWith('#free-trial')).to.be.true;
+    });
+
     it('should open local nav on click of localnav title', async () => {
       await createFullGlobalNavigation({ globalNavigation: gnavWithlocalNav });
       const localNavTitle = document.querySelector(selectors.localNavTitle);
@@ -761,21 +866,27 @@ describe('global navigation', () => {
     });
 
     it('should remove is-sticky class to localnav on scroll less than localnav placement', async () => {
+      let stickyCallback;
+      const OrigIO = window.IntersectionObserver;
+      window.IntersectionObserver = function IOmock(cb) { stickyCallback = cb; };
+      window.IntersectionObserver.prototype = { observe() {}, disconnect() {} };
       await createFullGlobalNavigation({ globalNavigation: gnavWithlocalNav });
+      stickyCallback([{ boundingClientRect: { top: 20 } }]);
+      window.IntersectionObserver = OrigIO;
       const localNav = document.querySelector(selectors.localNav);
-      sinon.stub(localNav, 'getBoundingClientRect').returns({ top: 20 });
-      window.dispatchEvent(new Event('scroll'));
-      const localNavAfterScroll = document.querySelector(selectors.localNav);
-      expect(localNavAfterScroll.classList.contains('is-sticky')).to.be.false;
+      expect(localNav.classList.contains('is-sticky')).to.be.false;
     });
 
     it('should add is-sticky class to localnav on scroll greater than localnav placement', async () => {
+      let stickyCallback;
+      const OrigIO = window.IntersectionObserver;
+      window.IntersectionObserver = function IOmock(cb) { stickyCallback = cb; };
+      window.IntersectionObserver.prototype = { observe() {}, disconnect() {} };
       await createFullGlobalNavigation({ globalNavigation: gnavWithlocalNav });
+      stickyCallback([{ boundingClientRect: { top: 0 } }]);
+      window.IntersectionObserver = OrigIO;
       const localNav = document.querySelector(selectors.localNav);
-      sinon.stub(localNav, 'getBoundingClientRect').returns({ top: 0 });
-      window.dispatchEvent(new Event('scroll'));
-      const localNavAfterScroll = document.querySelector(selectors.localNav);
-      expect(localNavAfterScroll.classList.contains('is-sticky')).to.be.true;
+      expect(localNav.classList.contains('is-sticky')).to.be.true;
     });
 
     it('should open both screen if localnav is present but shows only level 2 screen', async () => {

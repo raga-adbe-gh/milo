@@ -4,6 +4,9 @@
   --min-block-size-pill: 72px;
   --margin-inline-pill-desktop: 80px;
   --margin-inline-ribbon: 30px;
+  --margin-inline-ribbon-mobile: 15px;
+  --copy-wrap-margin-mobile: 12px;
+  --btn-padding-mobile: 4px 9px;
   --max-inline-size-image: 75px;
   --max-inline-size-icon: 231px;
   --inline-size-image: auto;
@@ -333,8 +336,7 @@
   margin-block-end: var(--spacing-xxs);
 }
 
-.notification .foreground:not(.no-image) .text .body-s.action-area,
-.notification .foreground:not(.no-image) .text .body-m.action-area {
+.notification .foreground .text .action-area {
   margin-block-end: 0;
 }
 
@@ -531,6 +533,30 @@
   }
 }
 
+@media screen and (max-width: 480px) {
+  .notification.ribbon.space-between .foreground {
+    margin-inline: var(--margin-inline-ribbon-mobile);
+  }
+
+  .notification.ribbon.space-between .foreground .icon-area {
+    margin-inline-end: var(--spacing-xxs);
+  }
+
+  .notification.ribbon.space-between .foreground .copy-wrap {
+    margin-inline-end: var(--copy-wrap-margin-mobile);
+  }
+
+  .notification.ribbon.space-between [class*="heading-"] strong {
+    font-size: var(--type-heading-s-size);
+  }
+
+  .notification.ribbon.space-between .action-area a {
+    font-size: var(--type-body-xxs-size);
+    padding: var(--btn-padding-mobile);
+    min-width: 0;
+  }
+}
+
 @media screen and (max-width: 359px) {
   .notification.ribbon.inline .action-area {
     flex-wrap: wrap;
@@ -625,6 +651,7 @@
 
   .notification.ribbon .action-area {
     inline-size: auto;
+    margin-block-end: 0;
   }
 
   .notification.ribbon .copy-wrap {

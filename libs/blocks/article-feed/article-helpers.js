@@ -20,7 +20,7 @@ let taxonomyModule;
  * @param {number} date The date to format
  * @returns {string} The formatted date
  */
-function calculateExcelDate(date) {
+export function calculateExcelDate(date) {
   return new Date(Math.round((date - (1 + 25567 + 1)) * 86400 * 1000));
 }
 
@@ -135,7 +135,10 @@ export async function loadTaxonomy() {
         a.href = tax.link;
       } else {
         // eslint-disable-next-line no-console
-        window.lana.log(`Trying to get a link for an unknown topic: ${topic} (current page)`, { tags: 'article-feed' });
+        window.lana.log(
+          `Trying to get a link for an unknown topic: ${topic} (current page)`,
+          { tags: 'article-feed', severity: 'warning' },
+        );
         a.href = '#';
       }
       delete a.dataset.topicLink;

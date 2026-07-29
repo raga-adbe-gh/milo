@@ -2,10 +2,10 @@
 import {
   loadBlock,
   decorateAutoBlock,
-  decorateLinks,
+  decorateLinksAsync,
   getMetadata,
   getConfig,
-  localizeLink,
+  localizeLinkAsync,
   loadStyle,
   loadScript,
   getFederatedUrl,
@@ -174,25 +174,30 @@ class Footer {
       error.tags = 'global-footer';
       error.url = url;
       error.errorType = 'e';
+      error.severity = 'error';
       lanaLog({ message: error.message, ...error });
       const { onFooterError } = getConfig();
       onFooterError?.(error);
       return;
     }
 
-    const [region, social] = ['.region-selector', '.social'].map((selector) => this.body.querySelector(selector));
-    const [regionParent, socialParent] = [region?.parentElement, social?.parentElement];
-    // We remove and add again the region and social elements from the body to make sure
+    const [region, social, market] = ['.region-selector', '.social', '.market-selector'].map((selector) => this.body.querySelector(selector));
+    const [regionParent, socialParent, marketParent] = [
+      region?.parentElement, social?.parentElement, market?.parentElement,
+    ];
+    // We remove and add again the region, social and market elements from the body to make sure
     // they don't get decorated twice
-    [regionParent, socialParent].forEach((parent) => parent?.replaceChildren());
+    [regionParent, socialParent, marketParent].forEach((parent) => parent?.replaceChildren());
 
-    decorateLinks(this.body);
+    await decorateLinksAsync(this.body);
 
     regionParent?.appendChild(region);
     socialParent?.appendChild(social);
+    marketParent?.appendChild(market);
 
-    // Support auto populated modal
-    await Promise.all([...this.body.querySelectorAll('.modal')].map(loadBlock));
+    // Support auto populated modal, fragment and market selector
+    const blocks = ['.modal', '.fragment', '.market-selector'].map((s) => [...this.body.querySelectorAll(s)]).flat();
+    await Promise.all(blocks.map(loadBlock));
 
     // Process Jarvis chat footer link
     await this.processJarvisLink();
@@ -272,6 +277,7 @@ class Footer {
         e: `${file.statusText} url: ${file.url}`,
         tags: 'global-footer',
         errorType: 'i',
+        severity: 'error',
       });
     }
     const content = await file.text();
@@ -312,6 +318,11 @@ class Footer {
 
   decorateRegionPicker = async () => {
     this.elements.regionPicker = '';
+    const marketSelector = this.body.querySelector('.market-selector');
+    if (marketSelector) {
+      this.elements.regionPicker = marketSelector;
+      return this.elements.regionPicker;
+    }
     const regionSelector = this.body.querySelector('.region-selector a');
     if (!regionSelector) return this.elements.regionPicker;
 
@@ -320,7 +331,11 @@ class Footer {
     try {
       url = new URL(regionSelector.href);
     } catch (e) {
-      lanaLog({ message: `Could not create URL for region picker; href: ${regionSelector.href}`, tags: 'global-footer', errorType: 'e' });
+      lanaLog({
+        message: `Could not create URL for region picker; href: ${regionSelector.href}`,
+        tags: 'global-footer',
+        severity: 'critical',
+      });
       return this.elements.regionPicker;
     }
 
@@ -347,7 +362,7 @@ class Footer {
 
     // Note: the region picker currently works only with Milo modals/fragments;
     // in the future we'll need to update this for non-Milo consumers
-    if (url.hash !== '') {
+    if (url.hash !== '' && url.hash !== '#_dnt') {
       // Hash -> region selector opens a modal
       decorateAutoBlock(regionPickerElem); // add modal-specific attributes
       regionPickerElem.href = url.hash;
@@ -392,7 +407,7 @@ class Footer {
       // No hash -> region selector expands a dropdown
       regionPickerElem.setAttribute('aria-haspopup', 'true');
       regionPickerElem.href = '#'; // reset href value to not get treated as a fragment
-      regionSelector.href = localizeLink(regionSelector.href);
+      regionSelector.href = await localizeLinkAsync(regionSelector.href);
       decorateAutoBlock(regionSelector); // add fragment-specific class(es)
       this.elements.regionPicker.append(regionSelector); // add fragment after regionPickerElem
       const { default: initFragment } = await import('../fragment/fragment.js');
@@ -558,14 +573,23 @@ class Footer {
     }
   };
 }
+const footerInstances = new WeakMap();
 
 export default function init(block) {
   try {
+    if (footerInstances.has(block)) return footerInstances.get(block);
+
     const footer = new Footer({ block });
+    footerInstances.set(block, footer);
     if (isDarkMode()) block.classList.add('feds--dark');
     return footer;
   } catch (e) {
-    lanaLog({ message: 'Could not create footer', e });
+    lanaLog({
+      message: 'Could not create footer',
+      e,
+      tags: 'global-footer',
+      severity: 'critical',
+    });
     return null;
   }
 }

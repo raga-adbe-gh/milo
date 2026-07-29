@@ -10,7 +10,7 @@ const isOpen = (element) => element.getAttribute('aria-expanded') === 'true'
 const isClosed = (element) => element.getAttribute('aria-expanded') === 'false'
   && element.hasAttribute('daa-lh', 'header|Open');
 const getPopup = (element) => element.parentElement.querySelector(selectors.popup);
-const getNavLinks = (trigger) => [...getPopup(trigger).querySelectorAll(`${selectors.navLink}, ${selectors.promoLink}, ${selectors.imagePromo}`)];
+const getNavLinks = (trigger) => [...getPopup(trigger).querySelectorAll(`${selectors.navLink}, ${selectors.promoLink}`)];
 let mainNavItems;
 let otherNavItems;
 let keyboardNavigation;
@@ -253,8 +253,7 @@ describe('keyboard navigation', () => {
         const navLinks = [
           ...triggerOne.parentElement.querySelectorAll(`
         ${selectors.navLink},
-        ${selectors.promoLink},
-        ${selectors.imagePromo}
+        ${selectors.promoLink}
       `),
         ];
         const lastNavLink = navLinks[navLinks.length - 1];
@@ -761,19 +760,6 @@ describe('keyboard navigation', () => {
         await sendKeys({ press: 'Tab' });
         await sendKeys({ up: 'Shift' });
       }
-
-      const firstSectionItems = [...document.querySelectorAll(`${selectors.globalFooter} ${selectors.column} ${selectors.section} li:first-of-type > a`)];
-      firstSectionItems[0].focus();
-      for await (const element of firstSectionItems) {
-        expect(document.activeElement).to.equal(element);
-        await sendKeys({ press: 'ArrowRight' });
-      }
-
-      firstSectionItems[firstSectionItems.length - 1].focus();
-      for await (const element of firstSectionItems.reverse()) {
-        expect(document.activeElement).to.equal(element);
-        await sendKeys({ press: 'ArrowLeft' });
-      }
     });
 
     // Added feature products for mobile as well
@@ -788,9 +774,12 @@ describe('keyboard navigation', () => {
       });
 
       const lastMenuSectionSelector = `${selectors.globalFooter} ${selectors.column}:last-of-type ${selectors.section}:last-of-type`;
-      document.querySelector(`${lastMenuSectionSelector} ${selectors.headline}`).setAttribute('aria-expanded', true);
+      document.querySelector(`${lastMenuSectionSelector} ${selectors.headline}`).focus();
+      await sendKeys({ press: 'Enter' });
       const lastMenuElement = [...document.querySelectorAll(`${lastMenuSectionSelector} li:last-of-type a`)][0];
       lastMenuElement.focus();
+      await sendKeys({ press: 'Tab' });
+      document.activeElement.setAttribute('aria-expanded', 'true');
       await sendKeys({ press: 'Tab' });
 
       const featureProductSelector = `.feds-featuredProducts ${selectors.section}`;
@@ -804,11 +793,7 @@ describe('keyboard navigation', () => {
       await sendKeys({ down: 'Shift' });
       await sendKeys({ press: 'Tab' });
       await sendKeys({ up: 'Shift' });
-      // SHIFT + TAB
-      await sendKeys({ down: 'Shift' });
-      await sendKeys({ press: 'Tab' });
-      await sendKeys({ up: 'Shift' });
-      expect(document.activeElement).to.equal(lastMenuElement);
+      expect(document.activeElement).to.equal(featureProductsLastLink);
     });
   });
 
@@ -850,10 +835,13 @@ describe('keyboard navigation', () => {
       });
 
       it('shift focus on tab for links on level 2 screen', async () => {
+        const fedsToggle = document.querySelector('.feds-toggle');
+        fedsToggle.focus();
+        await sendKeys({ press: 'Enter' });
         const firstTab = document.querySelector('header .feds-nav .tabs .tab');
         firstTab.focus();
         const allNavLinks = document.querySelectorAll('header .feds-nav section .feds-popup .tab-content > div:not([hidden="true"]) .feds-navLink');
-        await sendKeys({ press: 'Tab' });
+        await sendKeys({ press: 'ArrowRight' });
         expect(document.activeElement).to.equal(allNavLinks[0]);
       });
 

@@ -1,5 +1,5 @@
 import { createTag, getConfig, MILO_EVENTS } from '../../utils/utils.js';
-import { decorateAnchorVideo, syncPausePlayIcon } from '../../utils/decorate.js';
+import { decorateAnchorVideo, syncPausePlayIcon, USER_PAUSED_ATTR } from '../../utils/decorate.js';
 import { debounce } from '../../utils/action.js';
 
 const { miloLibs, codeRoot } = getConfig();
@@ -15,7 +15,13 @@ const ARROW_PREVIOUS_IMG = `<svg xmlns="http://www.w3.org/2000/svg" width="21" h
 <path d="M19.2214 10.8918C19.3516 10.5773 19.3516 10.2226 19.2214 9.90808C19.1562 9.75098 19.0621 9.60895 18.9435 9.49041L12.9241 3.47092C12.4226 2.96819 11.6076 2.96819 11.1061 3.47092C10.604 3.97239 10.604 4.78743 11.1061 5.2889L14.9312 9.11399H2.4314C1.72109 9.11399 1.146 9.69036 1.146 10.4C1.146 11.1097 1.72109 11.6861 2.4314 11.6861H14.9312L11.1061 15.5112C10.604 16.0126 10.604 16.8277 11.1061 17.3291C11.3568 17.5805 11.6863 17.7062 12.0151 17.7062C12.3439 17.7062 12.6733 17.5805 12.9241 17.3291L18.9436 11.3097C19.0622 11.1911 19.1562 11.0491 19.2214 10.8918Z"/>
 </svg>`;
 const LIGHTBOX_ICON = `<img class="expand-icon" alt="Expand carousel to full screen" src="${base}/blocks/carousel/img/expand.svg" height="14" width="20">`;
-const CLOSE_ICON = `<img class="expand-icon" alt="Expand carousel to full screen" src="${base}/blocks/carousel/img/close.svg" height="20" width="20">`;
+const CLOSE_ICON = `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <g transform="translate(-10500 3403)">
+    <circle cx="10" cy="10" r="10" transform="translate(10500 -3403)"/>
+    <line y1="8" x2="8" transform="translate(10506 -3397)" fill="none" stroke-width="2"/>
+    <line x1="8" y1="8" transform="translate(10506 -3397)" fill="none" stroke-width="2"/>
+  </g>
+</svg>`;
 
 const KEY_CODES = {
   SPACE: 'Space',
@@ -23,15 +29,51 @@ const KEY_CODES = {
   HOME: 'Home',
   ARROW_LEFT: 'ArrowLeft',
   ARROW_RIGHT: 'ArrowRight',
+  ESCAPE: 'Escape',
+  TAB: 'Tab',
 };
 const FOCUSABLE_SELECTOR = 'a, :not(.video-container, .pause-play-wrapper) > video';
 
-function decorateNextPreviousBtns() {
+const isDesktop = window.matchMedia('(min-width: 900px)');
+const isMobileVp = window.matchMedia('(max-width: 599px)');
+const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function getPreviousAriaLabel(currentIndex, totalSlides) {
+  return currentIndex === 0 && totalSlides > 0
+    ? `Previous slide, slide ${currentIndex + 1} of ${totalSlides}`
+    : 'Previous slide';
+}
+
+function updatePreviousAriaLabel(carouselElements) {
+  const { slides, nextPreviousBtns, currentActiveIndex } = carouselElements;
+  if (!nextPreviousBtns?.[0]) return;
+
+  nextPreviousBtns[0].setAttribute('aria-label', getPreviousAriaLabel(currentActiveIndex, slides.length));
+}
+
+function isHintingTablet(el) {
+  return el.classList.contains('hinting-tablet') && window.matchMedia('(min-width: 600px) and (max-width: 1199px)').matches;
+}
+
+function getCircularNavState(carouselElements) {
+  const { el, currentActiveIndex, slides } = carouselElements;
+  const atStart = currentActiveIndex === 0;
+  if (!el.classList.contains('disable-circular-nav')) return { atStart, atEnd: false };
+
+  const lastIdx = isHintingTablet(el) ? slides.length - 2 : slides.length - 1;
+  const atEnd = currentActiveIndex >= lastIdx;
+
+  return { atStart, atEnd };
+}
+
+function decorateNextPreviousBtns(slides, currentIndex = 0) {
+  const totalSlides = slides ? slides.length : 0;
+
   const previousBtn = createTag(
     'button',
     {
       class: 'carousel-button carousel-previous is-delayed',
-      'aria-label': 'Previous slide',
+      'aria-label': getPreviousAriaLabel(currentIndex, totalSlides),
       'data-toggle': 'previous',
     },
     ARROW_PREVIOUS_IMG,
@@ -69,7 +111,7 @@ function decorateLightboxButtons() {
   return [expandBtn, closeBtn];
 }
 
-function decorateSlideIndicators(slides, jumpTo) {
+function decorateSlideIndicators(slides) {
   const indicatorDots = [];
 
   for (let i = 0; i < slides.length; i += 1) {
@@ -78,21 +120,56 @@ function decorateSlideIndicators(slides, jumpTo) {
       'data-index': i,
     });
 
-    if (jumpTo) {
-      li.setAttribute('role', 'tab');
-      li.setAttribute('tabindex', -1);
-      li.setAttribute('aria-selected', false);
-      li.setAttribute('aria-labelledby', `Viewing Slide ${i + 1}`);
-    }
-
     // Set inital active state
     if (i === 0) {
       li.classList.add('active');
-      if (jumpTo) li.setAttribute('tabindex', 0);
+      li.setAttribute('aria-current', 'location');
     }
     indicatorDots.push(li);
   }
   return indicatorDots;
+}
+
+function updateButtonStates(carouselElements) {
+  const { slides, nextPreviousBtns, currentActiveIndex } = carouselElements;
+  const activeSlideIndex = currentActiveIndex;
+
+  const totalSlides = slides.length;
+  const isFirst = currentActiveIndex === 0;
+  const isLast = currentActiveIndex === totalSlides - 1;
+  const isMobile = window.innerWidth < 900;
+
+  nextPreviousBtns?.forEach((btn, index) => {
+    if (isMobile) {
+      const disable = (index === 0 && isFirst) || (index === 1 && isLast);
+      btn.disabled = disable;
+      btn.classList.toggle('disabled', disable);
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('disabled');
+    }
+  });
+
+  const lastSlide = slides[slides.length - 1];
+  const firstSlide = slides[0];
+  if (isMobile) {
+    lastSlide?.classList.toggle('hide-left-hint', activeSlideIndex === 0);
+    firstSlide?.classList.toggle('hide-left-hint', activeSlideIndex === totalSlides - 1);
+  } else {
+    firstSlide?.classList.remove('hide-left-hint');
+    lastSlide?.classList.remove('hide-left-hint');
+  }
+}
+
+function checkCircularNav(carouselElements) {
+  const { el, nextPreviousBtns } = carouselElements;
+  if (!el.classList.contains('disable-circular-nav')) return;
+  const { atStart, atEnd } = getCircularNavState(carouselElements);
+  nextPreviousBtns?.forEach((btn, i) => {
+    const off = i === 0 ? atStart : atEnd;
+    btn.disabled = off;
+    btn.classList.toggle('disabled', off);
+  });
 }
 
 function handleNext(nextElement, elements) {
@@ -109,20 +186,89 @@ function handlePrevious(previousElment, elements) {
   return elements[elements.length - 1];
 }
 
+export async function waitImgReady(img) {
+  if (!img) return;
+
+  if (!img.complete) {
+    await new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+    });
+  }
+
+  if ((img.offsetHeight === 0 || img.clientHeight === 0) && img.naturalHeight) {
+    await new Promise((resolve) => {
+      const ro = new ResizeObserver(() => {
+        if (img.offsetHeight > 0 && img.clientHeight > 0) {
+          ro.disconnect();
+          resolve();
+        }
+      });
+      ro.observe(img);
+    });
+  }
+}
+
+async function setEqualHeight(slides, slideContainer, currentActiveIndex = 0) {
+  const allImgs = slides[0]?.querySelectorAll('picture img');
+  if (allImgs?.length) {
+    await Promise.all([...allImgs].map((img) => waitImgReady(img)));
+  }
+  const maxHeight = Math.max(...slides.map((slide) => slide.offsetHeight));
+  const activeSlide = slides[currentActiveIndex];
+  slides.forEach((slide) => {
+    if (slide === activeSlide) {
+      slide.style.height = `${maxHeight}px`;
+      slide.style.transition = 'height 0.2s ease-out';
+    } else {
+      slide.style.height = `${maxHeight - 40}px`;
+      slide.style.transition = 'height 0.2s ease-out';
+    }
+  });
+  slideContainer.style.height = `${maxHeight}px`;
+}
+
+function removeEqualHeight(slides, slideContainer) {
+  slides.forEach((slide) => {
+    slide.style.height = '';
+    slide.style.transition = '';
+  });
+  slideContainer.style.height = '';
+}
+
 function handleLightboxButtons(lightboxBtns, el, slideWrapper) {
   const curtain = createTag('div', { class: 'carousel-curtain' });
+  const header = document.querySelector('header');
+  const headerZIndex = header?.style.zIndex;
+  const fedsLocalnav = document.querySelector('.feds-localnav');
+  const fedsLocalnavZIndex = fedsLocalnav?.style.zIndex;
+
+  const closeLightbox = () => {
+    if (header) header.style.zIndex = headerZIndex;
+    if (fedsLocalnav) fedsLocalnav.style.zIndex = fedsLocalnavZIndex;
+    el.classList.remove('lightbox-active');
+    el.removeAttribute('role');
+    el.removeAttribute('aria-modal');
+    el.removeAttribute('name');
+    curtain.remove();
+  };
 
   [...lightboxBtns].forEach((button) => {
     button.addEventListener('click', (event) => {
       event.preventDefault();
       if (button.classList.contains('carousel-expand')) {
+        if (header) header.style.zIndex = '0';
+        if (fedsLocalnav) fedsLocalnav.style.zIndex = '0';
         el.classList.add('lightbox-active');
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('name', el.querySelector('h1, h2, h3, h4, h5, h6')?.textContent.trim() || 'Carousel modal');
         slideWrapper.append(curtain);
+        const firstFocusable = el.querySelector('button:not(.carousel-expand), a, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        firstFocusable?.focus();
       }
 
       if (button.classList.contains('carousel-close')) {
-        el.classList.remove('lightbox-active');
-        curtain.remove();
+        closeLightbox();
       }
     }, true);
   });
@@ -130,31 +276,91 @@ function handleLightboxButtons(lightboxBtns, el, slideWrapper) {
   // Handle click outside of Carousel
   curtain.addEventListener('click', (event) => {
     event.preventDefault();
-    el.classList.remove('lightbox-active');
-    curtain.remove();
+    closeLightbox();
   }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (!el.classList.contains('lightbox-active')) return;
+
+    if (event.key === KEY_CODES.ESCAPE) {
+      closeLightbox();
+      return;
+    }
+
+    if (event.key === KEY_CODES.TAB) {
+      const focusableElements = [...el.querySelectorAll('button:not(.carousel-expand), a, input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((elem) => !elem.closest('[aria-hidden="true"]'));
+      const firstFocusable = focusableElements[0];
+      const lastFocusable = focusableElements.at(-1);
+
+      if (event.shiftKey && document.activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+        return;
+      }
+
+      if (!event.shiftKey && document.activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    }
+  });
 }
 
-function jumpToDirection(activeSlideIndex, jumpToIndex, slideContainer) {
-  if (activeSlideIndex < jumpToIndex) {
-    slideContainer.classList.remove('is-reversing');
-  } else {
-    slideContainer.classList.add('is-reversing');
-  }
+// Hinting layouts intentionally peek the neighboring slide, so require
+// majority overlap (not just any overlap) to count a slide as still "in view".
+const VISIBILITY_THRESHOLD = 0.5;
+
+function getOverlapRatio(rect, wrapperRect) {
+  const overlapWidth = Math.max(0, Math.min(rect.right, wrapperRect.right)
+    - Math.max(rect.left, wrapperRect.left));
+  const overlapHeight = Math.max(0, Math.min(rect.bottom, wrapperRect.bottom)
+    - Math.max(rect.top, wrapperRect.top));
+  const rectArea = rect.width * rect.height;
+  if (!rectArea) return 0;
+  return (overlapWidth * overlapHeight) / rectArea;
 }
 
-function checkSlideForVideo(activeSlide) {
-  const video = activeSlide.querySelector('video');
-  /* c8 ignore start */
-  if (video?.played.length > 0 && !video?.paused) {
-    video.pause();
-    syncPausePlayIcon(video);
-  }
-  /* c8 ignore end */
+// Pauses a slide's video if it's actually playing and no longer
+// sufficiently overlaps the carousel wrapper's visible (overflow: hidden) area.
+function checkSlideForVideo(slide, wrapperRect) {
+  const video = slide.querySelector('video');
+  if (!video || !video.played.length || video.paused) return;
+  if (getOverlapRatio(video.getBoundingClientRect(), wrapperRect) >= VISIBILITY_THRESHOLD) return;
+  video.pause();
+  syncPausePlayIcon(video);
 }
 
-// Sets a muliplyer variable, used by CSS, to move the indicator dots.
-function setIndicatorMultiplyer(carouselElements, activeSlideIndicator, event) {
+function pauseVideosOutOfView(slides, wrapper) {
+  const wrapperRect = wrapper?.getBoundingClientRect();
+  if (!wrapperRect) return;
+  slides.forEach((slide) => checkSlideForVideo(slide, wrapperRect));
+}
+
+// Waits for the slide track's transform transition to finish (falling back to
+// a timer in case transitionend never fires) before checking visibility,
+// since slide positions aren't final until the transition settles. Filtered
+// to the track's own transform so a child slide's opacity transition
+// (carousel.css .carousel-slide) can't resolve this early via bubbling.
+const TRANSITION_FALLBACK_MS = 700; // .6s CSS transition + 25ms reflow delay, plus margin
+
+function waitForSlideTransition(slideContainer, onDone) {
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    // eslint-disable-next-line no-use-before-define
+    clearTimeout(fallbackTimer);
+    onDone();
+  };
+  const fallbackTimer = setTimeout(settle, TRANSITION_FALLBACK_MS);
+  slideContainer.addEventListener('transitionend', (e) => {
+    if (e.target !== slideContainer || e.propertyName !== 'transform') return;
+    settle();
+  }, { once: true });
+}
+
+// Sets a multiplier variable, used by CSS, to move the indicator dots.
+function setIndicatorMultiplier(carouselElements, activeSlideIndicator, event) {
   const { slides, direction } = carouselElements;
   const maxViewableIndicators = 6;
   if (slides.length <= maxViewableIndicators) return;
@@ -162,44 +368,53 @@ function setIndicatorMultiplyer(carouselElements, activeSlideIndicator, event) {
   const { currentTarget, key } = event;
   const eventDirection = currentTarget.dataset.toggle || direction;
   const keyNavDirection = key === KEY_CODES.ARROW_RIGHT || undefined;
-  const multiplyerOffset = (eventDirection === 'next' || eventDirection === 'left')
+  const multiplierOffset = (eventDirection === 'next' || eventDirection === 'left')
     || keyNavDirection ? 4 : 3;
   const activeSlideIndex = Number(activeSlideIndicator.dataset.index);
-  if (activeSlideIndex > multiplyerOffset && activeSlideIndex <= slides.length) {
+  if (activeSlideIndex > multiplierOffset && activeSlideIndex <= slides.length) {
     /*
-      * Stop adding to the multiplyer if it equals the difference
+      * Stop adding to the multiplier if it equals the difference
       * between the slides length and maxViewableIndicators
     */
-    const multiplyer = activeSlideIndex - multiplyerOffset >= slides.length - maxViewableIndicators
+    const multiplier = activeSlideIndex - multiplierOffset >= slides.length - maxViewableIndicators
       ? slides.length - maxViewableIndicators
-      : activeSlideIndex - multiplyerOffset;
+      : activeSlideIndex - multiplierOffset;
     activeSlideIndicator.parentElement.classList.add('move-indicators');
-    activeSlideIndicator.parentElement.style = `--indicator-multiplyer: ${multiplyer}`;
+    activeSlideIndicator.parentElement.style = `--indicator-multiplier: ${multiplier}`;
   } else {
-    const multiplyer = 0;
-    activeSlideIndicator.parentElement.style = `--indicator-multiplyer: ${multiplyer}`;
+    const multiplier = 0;
+    activeSlideIndicator.parentElement.style = `--indicator-multiplier: ${multiplier}`;
   }
 }
 
-function updateAriaLive(ariaLive, slide) {
+function updateAriaLive(ariaLive, slide, carouselElements) {
   let text = '';
   slide.querySelectorAll(':scope > :not(.section-metadata').forEach((el, index) => {
     text += `${index ? ' ' : ''}${el.textContent.trim()}`;
   });
-  if (text) {
-    ariaLive.textContent = text;
-  } else {
-    const el = slide.querySelector('img[alt], video[title], iframe[title]');
-    ariaLive.textContent = el?.getAttribute('alt') || el?.getAttribute('title') || '';
+
+  const { slides, el: block } = carouselElements;
+
+  let slideInfo = '';
+  if (![...block.classList].find((cls) => cls.startsWith('show-'))) {
+    slideInfo = `Slide ${+slide.dataset.index + 1} of ${slides.length}`;
   }
+
+  if (!text) {
+    const el = slide.querySelector('img[alt], video[title], iframe[title]');
+    text = el?.getAttribute('alt') || el?.getAttribute('title') || '';
+  }
+
+  ariaLive.textContent = [text, slideInfo].filter(Boolean).join(', ');
 }
 
 function setAriaHiddenAndTabIndex({ el: block, slides }, activeEl) {
   const active = activeEl ?? block.querySelector('.carousel-slide.active');
   const activeIdx = slides.findIndex((el) => el === active);
-  const isWide = window.matchMedia('(min-width: 900px)').matches;
   const showClass = [...block.classList].find((cls) => cls.startsWith('show-'));
-  const visible = isWide && showClass ? showClass.split('-')[1] : 1;
+  const visible = (isDesktop.matches && block.matches('.ups-desktop') && slides.length)
+    || (isDesktop.matches && showClass?.split('-')[1])
+    || 1;
   const ordered = activeIdx > 0
     ? [...slides.slice(activeIdx), ...slides.slice(0, activeIdx)] : slides;
   ordered.forEach((slide, i) => {
@@ -211,8 +426,15 @@ function setAriaHiddenAndTabIndex({ el: block, slides }, activeEl) {
   });
 }
 
-function moveSlides(event, carouselElements, jumpToIndex) {
+// Skip focus on touch events to prevent the browser from scrolling the page
+function focusNavButton(button, event) {
+  if (event.type === 'touchend') return;
+  button.focus({ preventScroll: true });
+}
+
+function moveSlides(event, carouselElements) {
   const {
+    el,
     slideContainer,
     slides,
     nextPreviousBtns,
@@ -220,17 +442,29 @@ function moveSlides(event, carouselElements, jumpToIndex) {
     controlsContainer,
     direction,
     ariaLive,
-    jumpTo,
   } = carouselElements;
+
+  const isNext = event.currentTarget?.dataset?.toggle === 'next'
+    || event.key === KEY_CODES.ARROW_RIGHT
+    || (direction === 'left' && event.type === 'touchend');
+  if (el.classList.contains('disable-circular-nav')) {
+    const { atStart, atEnd } = getCircularNavState(carouselElements);
+    const atBoundary = isNext ? atEnd : atStart;
+    if (atBoundary) {
+      checkCircularNav(carouselElements);
+      pauseVideosOutOfView(slides, slideContainer.closest('.carousel-wrapper'));
+      return;
+    }
+  }
 
   ariaLive.textContent = '';
 
   let referenceSlide = slideContainer.querySelector('.reference-slide');
   let activeSlide = slideContainer.querySelector('.active');
   let activeSlideIndicator = controlsContainer.querySelector('.active');
-  const activeSlideIndex = activeSlideIndicator.dataset.index;
 
-  checkSlideForVideo(activeSlide);
+  // hinting-tablet / hinting-mobile
+  const isHintingMobile = (el.classList.contains('hinting-mobile') || el.classList.contains('hinting-center-mobile')) && isMobileVp.matches;
 
   // Track reference slide - last slide initially
   if (!referenceSlide) {
@@ -244,61 +478,63 @@ function moveSlides(event, carouselElements, jumpToIndex) {
   referenceSlide.style.order = null;
   activeSlide.classList.remove('active');
   activeSlideIndicator.classList.remove('active');
-  if (jumpTo) activeSlideIndicator.setAttribute('tabindex', -1);
-
-  /*
-   * If indicator dot buttons are clicked update:
-   * reference slide, active indicator dot, and active slide
-  */
-  if (jumpToIndex >= 0) {
-    if (jumpToIndex === 0) {
-      referenceSlide = slides[slides.length - 1];
-    } else if (jumpToIndex === slides.length - 1) {
-      referenceSlide = slides[slides.length - 2];
-    } else {
-      referenceSlide = slides[jumpToIndex - 1];
-    }
-    referenceSlide.classList.add('reference-slide');
-    referenceSlide.style.order = '1';
-    activeSlideIndicator = slideIndicators[jumpToIndex];
-    activeSlide = slides[jumpToIndex];
-    jumpToDirection(activeSlideIndex, jumpToIndex, slideContainer);
-  }
+  activeSlideIndicator.removeAttribute('aria-current');
 
   // Next arrow button, swipe, keyboard navigation
   if ((event.currentTarget).dataset.toggle === 'next'
     || event.key === KEY_CODES.ARROW_RIGHT
     || (direction === 'left' && event.type === 'touchend')) {
-    nextPreviousBtns[1].focus();
+    focusNavButton(nextPreviousBtns[1], event);
     referenceSlide = handleNext(referenceSlide, slides);
     activeSlideIndicator = handleNext(activeSlideIndicator, slideIndicators);
     activeSlide = handleNext(activeSlide, slides);
     slideContainer?.classList.remove('is-reversing');
+    carouselElements.currentActiveIndex = (carouselElements.currentActiveIndex + 1) % slides.length;
   }
 
   // Previous arrow button, swipe, keyboard navigation
   if ((event.currentTarget).dataset.toggle === 'previous'
     || event.key === KEY_CODES.ARROW_LEFT
     || (direction === 'right' && event.type === 'touchend')) {
-    nextPreviousBtns[0].focus();
+    focusNavButton(nextPreviousBtns[0], event);
     referenceSlide = handlePrevious(referenceSlide, slides);
     activeSlideIndicator = handlePrevious(activeSlideIndicator, slideIndicators);
     activeSlide = handlePrevious(activeSlide, slides);
     slideContainer.classList.add('is-reversing');
+    carouselElements.currentActiveIndex = (carouselElements.currentActiveIndex - 1 + slides.length)
+      % slides.length;
   }
 
   // Update reference slide attributes
   referenceSlide.classList.add('reference-slide');
   referenceSlide.style.order = '1';
 
-  updateAriaLive(ariaLive, activeSlide);
+  updateAriaLive(ariaLive, activeSlide, carouselElements);
 
   // Update active slide and indicator dot attributes
   activeSlide.classList.add('active');
   setAriaHiddenAndTabIndex(carouselElements, activeSlide);
+
+  if ((isHintingTablet(el) || isHintingMobile) && !prefersReducedMotion()) {
+    const video = activeSlide?.querySelector('video');
+    /* c8 ignore start */
+    if (video?.paused
+      && video.readyState >= 2
+      && !video.hasAttribute(USER_PAUSED_ATTR)) {
+      video.play().catch(() => {});
+      syncPausePlayIcon(video);
+    }
+    /* c8 ignore end */
+  }
+
+  // Update heights dynamically for disable-button
+  if (carouselElements.el.classList.contains('disable-buttons') && window.innerWidth < 900) {
+    setEqualHeight(slides, slideContainer, carouselElements.currentActiveIndex);
+  }
+
   activeSlideIndicator.classList.add('active');
-  if (jumpTo) activeSlideIndicator.setAttribute('tabindex', 0);
-  setIndicatorMultiplyer(carouselElements, activeSlideIndicator, event);
+  activeSlideIndicator.setAttribute('aria-current', 'location');
+  setIndicatorMultiplier(carouselElements, activeSlideIndicator, event);
 
   // Loop over all slide siblings to update their order
   for (let i = 2; i <= slides.length; i += 1) {
@@ -306,15 +542,23 @@ function moveSlides(event, carouselElements, jumpToIndex) {
     referenceSlide.style.order = i;
   }
 
+  updatePreviousAriaLabel(carouselElements);
+
+  if (carouselElements.el.classList.contains('disable-buttons') && window.innerWidth < 900) {
+    updateButtonStates(carouselElements);
+  }
+  checkCircularNav(carouselElements);
+
   /*
    * Activates slide animation.
    * Delay time matches animation time for next/previous controls.
-   * JumpToInidex uses a shorter delay that better supports
-   * non-linear slide navigation.
   */
   const slideDelay = 25;
   slideContainer.classList.remove('is-ready');
-  return setTimeout(() => slideContainer.classList.add('is-ready'), slideDelay);
+  setTimeout(() => slideContainer.classList.add('is-ready'), slideDelay);
+
+  const wrapper = slideContainer.closest('.carousel-wrapper');
+  waitForSlideTransition(slideContainer, () => pauseVideosOutOfView(slides, wrapper));
 }
 
 export function getSwipeDistance(start, end) {
@@ -338,17 +582,25 @@ export function getSwipeDirection(swipe, swipeDistance) {
   * Mobile swipe/touch direction detection
   */
 function mobileSwipeDetect(carouselElements) {
-  const { el } = carouselElements;
+  const { el, slides } = carouselElements;
   const swipe = { xMin: 50 };
   /* c8 ignore start */
   el.addEventListener('touchstart', (event) => {
     const touch = event.touches[0];
     swipe.xStart = touch.screenX;
+    swipe.yStart = touch.screenY;
   });
 
   el.addEventListener('touchmove', (event) => {
     const touch = event.touches[0];
     swipe.xEnd = touch.screenX;
+    swipe.yEnd = touch.screenY;
+    const xDistance = Math.abs(swipe.xEnd - swipe.xStart);
+    const yDistance = Math.abs(swipe.yEnd - swipe.yStart);
+    // If horizontal movement is greater than vertical, prevent default to stop vertical scrolling
+    if (xDistance > yDistance && xDistance > 10) {
+      event.preventDefault();
+    }
   });
 
   el.addEventListener('touchend', (event) => {
@@ -356,6 +608,27 @@ function mobileSwipeDetect(carouselElements) {
     swipeDistance.xDistance = getSwipeDistance(swipe.xStart, swipe.xEnd);
     carouselElements.direction = getSwipeDirection(swipe, swipeDistance);
 
+    // stop swipe for disabled-buttons variant.
+    const activeSlideIndex = carouselElements.currentActiveIndex;
+    const { classList } = carouselElements.el;
+    const isSwipingBack = carouselElements.direction === 'right';
+    const isSwipingForward = carouselElements.direction === 'left';
+    const isAtStart = activeSlideIndex === 0 && isSwipingBack;
+
+    if (classList.contains('disable-buttons')
+          && (isAtStart || (activeSlideIndex === slides.length - 1 && isSwipingForward))) {
+      swipe.xStart = 0;
+      swipe.xEnd = 0;
+      return;
+    }
+    if (classList.contains('disable-circular-nav')) {
+      const { atStart, atEnd } = getCircularNavState(carouselElements);
+      if ((isSwipingBack && atStart) || (isSwipingForward && atEnd)) {
+        swipe.xStart = 0;
+        swipe.xEnd = 0;
+        return;
+      }
+    }
     // reset end swipe values
     swipe.xStart = 0;
     swipe.xEnd = 0;
@@ -368,7 +641,7 @@ function mobileSwipeDetect(carouselElements) {
 }
 
 function handleChangingSlides(carouselElements) {
-  const { el, nextPreviousBtns, slideIndicators, jumpTo } = carouselElements;
+  const { el, nextPreviousBtns } = carouselElements;
 
   // Handle Next/Previous Buttons
   [...nextPreviousBtns].forEach((btn) => {
@@ -379,19 +652,16 @@ function handleChangingSlides(carouselElements) {
 
   // Handle keyboard navigation
   el.addEventListener('keydown', (event) => {
-    if (event.key === KEY_CODES.ARROW_RIGHT
-      || event.key === KEY_CODES.ARROW_LEFT) { moveSlides(event, carouselElements); }
-  });
+    const keyMap = {
+      [KEY_CODES.ARROW_LEFT]: 0, // previous
+      [KEY_CODES.ARROW_RIGHT]: 1, // next
+    };
 
-  // Handle slide indictors click
-  if (jumpTo) {
-    [...slideIndicators].forEach((li) => {
-      li.addEventListener('click', (event) => {
-        const jumpToIndex = Number(li.dataset.index);
-        moveSlides(event, carouselElements, jumpToIndex);
-      });
-    });
-  }
+    const btnIndex = keyMap[event.key];
+    // Stop keyboard navigation for disabled-buttons variant.
+    if (btnIndex === undefined || nextPreviousBtns[btnIndex]?.disabled) return;
+    moveSlides(event, carouselElements);
+  });
 
   // Swipe Events
   mobileSwipeDetect(carouselElements);
@@ -409,17 +679,37 @@ function convertMpcMp4(slides) {
   });
 }
 
-function readySlides(slides, slideContainer) {
+function readySlides(slides, slideContainer, isUpsDesktop, carouselElements) {
   slideContainer.classList.add('is-ready');
-  slides.forEach((slide, idx) => {
-    // Set last slide to be first in order and make reference.
-    if (slides.length - 1 === idx) {
-      slide.style.order = 1;
-      slide.classList.add('reference-slide');
-    } else {
-      slide.style.order = idx + 2;
-    }
-  });
+
+  const setOrder = () => {
+    carouselElements.currentActiveIndex = 0;
+    slides.forEach((slide, idx) => {
+      const isLastSlide = slides.length - 1 === idx;
+      slide.style.order = isLastSlide ? 1 : idx + 2;
+      slide.classList.toggle('reference-slide', isLastSlide);
+    });
+  };
+
+  const setUpsOrder = () => {
+    if (!isDesktop.matches) setOrder();
+    else slides.forEach((slide) => { slide.style.order = ''; });
+  };
+
+  if (!isUpsDesktop) setOrder();
+  else {
+    setUpsOrder();
+    isDesktop.addEventListener('change', setUpsOrder);
+  }
+}
+
+function updateDisableButtonsHeights(carouselElements) {
+  const { slides, slideContainer, currentActiveIndex } = carouselElements;
+  if (window.innerWidth < 900) {
+    setEqualHeight(slides, slideContainer, currentActiveIndex);
+  } else {
+    removeEqualHeight(slides, slideContainer);
+  }
 }
 
 export default function init(el) {
@@ -440,11 +730,10 @@ export default function init(el) {
     return rdx;
   }, []);
 
-  const jumpTo = el.classList.contains('jump-to');
   const fragment = new DocumentFragment();
-  const nextPreviousBtns = decorateNextPreviousBtns();
+  const nextPreviousBtns = decorateNextPreviousBtns(slides);
   const nextPreviousContainer = createTag('div', { class: 'carousel-button-container' });
-  const slideIndicators = decorateSlideIndicators(slides, jumpTo);
+  const slideIndicators = decorateSlideIndicators(slides);
   const controlsContainer = createTag('div', { class: 'carousel-controls is-delayed' });
 
   convertMpcMp4(slides);
@@ -464,38 +753,37 @@ export default function init(el) {
     slideIndicators,
     controlsContainer,
     direction: undefined,
-    jumpTo,
     ariaLive,
+    currentActiveIndex: 0,
   };
 
-  if (el.classList.contains('lightbox')) {
-    const lightboxBtns = decorateLightboxButtons();
-    slideWrapper.append(slideContainer, ...lightboxBtns);
-    handleLightboxButtons(lightboxBtns, el, slideWrapper);
-  } else {
-    slideWrapper.append(slideContainer);
-  }
   /*
    * Hinting center variant - Set slides order
    * before moveSlides is called for centering to work.
   */
   if (el.classList.contains('hinting-center-mobile')) {
-    readySlides(slides, slideContainer);
+    const isUpsDesktop = el.classList.contains('ups-desktop');
+    readySlides(slides, slideContainer, isUpsDesktop, carouselElements);
   }
 
   el.textContent = '';
   el.append(slideWrapper);
 
   const dotsUl = createTag('ul', { class: 'carousel-indicators' });
-  if (jumpTo) {
-    dotsUl.setAttribute('role', 'tablist');
-    dotsUl.setAttribute('tabindex', 0);
-  }
 
   dotsUl.append(...slideIndicators);
   controlsContainer.append(dotsUl);
   nextPreviousContainer.append(...nextPreviousBtns, controlsContainer);
   el.append(nextPreviousContainer);
+
+  if (el.classList.contains('lightbox')) {
+    const lightboxBtns = decorateLightboxButtons();
+    el.append(lightboxBtns[1]);
+    slideWrapper.append(lightboxBtns[0], slideContainer);
+    handleLightboxButtons(lightboxBtns, el, slideWrapper);
+  } else {
+    slideWrapper.append(slideContainer);
+  }
 
   function normalizeVideoHeights() {
     const videos = el.querySelectorAll('video');
@@ -533,9 +821,28 @@ export default function init(el) {
   parentArea.addEventListener(MILO_EVENTS.DEFERRED, handleDeferredImages, true);
 
   slides[0].classList.add('active');
+
   handleChangingSlides(carouselElements);
   setAriaHiddenAndTabIndex(carouselElements, slides[0]);
-  window.addEventListener('resize', () => setAriaHiddenAndTabIndex(carouselElements));
+  window.addEventListener('resize', () => {
+    setAriaHiddenAndTabIndex(carouselElements);
+    if (el.classList.contains('disable-buttons')) {
+      updateDisableButtonsHeights(carouselElements);
+      updateButtonStates(carouselElements);
+    }
+    checkCircularNav(carouselElements);
+  });
+
+  function handleDeferredHeights() {
+    updateDisableButtonsHeights(carouselElements);
+    checkCircularNav(carouselElements);
+  }
+
+  if (el.classList.contains('disable-buttons')) {
+    updateButtonStates(carouselElements);
+    setTimeout(handleDeferredHeights, 1000);
+  }
+  checkCircularNav(carouselElements);
 
   function handleLateLoadingNavigation() {
     [...el.querySelectorAll('.is-delayed')].forEach((item) => item.classList.remove('is-delayed'));

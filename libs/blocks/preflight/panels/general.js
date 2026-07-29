@@ -1,5 +1,8 @@
 import { html, signal, useEffect } from '../../../deps/htm-preact.js';
+import { STATUS_TO_ICON_MAP, STRUCTURE_TITLES } from '../checks/constants.js';
+import { runChecks as runStructureChecks } from '../checks/structure.js';
 import userCanPublishPage from '../../../tools/utils/publish.js';
+import { runChecks as runLocalizationChecks } from '../checks/localization.js';
 
 const DEF_NOT_FOUND = 'Not found';
 const DEF_NEVER = 'Never';
@@ -9,14 +12,79 @@ const NOT_FOUND = {
 };
 const DA_DOMAIN = 'da.live';
 const nonEDSContent = 'Non AEM EDS Content';
-const EXCLUDED_PATHS = ['/tools/caas'];
+const EXCLUDED_PATHS = ['/tools/caas', '/libs/'];
+
+const CROSS_REPO_PREFIXES = [
+  { prefix: '/federal/', owner: 'adobecom', repo: 'federal', branch: 'main' },
+];
 
 const content = signal({});
 
+const navResult = signal({ icon: 'purple', title: STRUCTURE_TITLES.navigation, description: 'Checking...' });
+const footerResult = signal({ icon: 'purple', title: STRUCTURE_TITLES.footer, description: 'Checking...' });
+const regionSelectorResult = signal({ icon: 'purple', title: STRUCTURE_TITLES.regionSelector, description: 'Checking...' });
+const georoutingResult = signal({ icon: 'purple', title: STRUCTURE_TITLES.georouting, description: 'Checking...' });
+const breadcrumbsResult = signal({ icon: 'purple', title: STRUCTURE_TITLES.breadcrumbs, description: 'Checking...' });
+const localizationResult = signal({ icon: 'purple', title: 'Links', description: 'Checking...' });
+const localizationIssues = signal([]);
+const localizationClosed = signal(false);
+
+async function getStructureResults() {
+  const signals = [
+    navResult,
+    footerResult,
+    regionSelectorResult,
+    georoutingResult,
+    breadcrumbsResult,
+  ];
+  const checks = runStructureChecks({ area: document });
+
+  await Promise.all(checks.map((result, index) => Promise.resolve(result)
+    .then((res) => {
+      const icon = STATUS_TO_ICON_MAP[res.status] || 'orange';
+      signals[index].value = {
+        icon,
+        title: res.title,
+        description: res.description,
+      };
+    })
+    .catch((error) => {
+      signals[index].value = {
+        icon: 'red',
+        title: 'Error',
+        description: `Error: ${error.message}`,
+      };
+    })));
+}
+
+async function getLocalizationResults() {
+  try {
+    const [res] = await runLocalizationChecks({ area: document });
+    localizationResult.value = {
+      icon: STATUS_TO_ICON_MAP[res.status] || 'orange',
+      title: res.title,
+      description: res.description,
+    };
+    localizationIssues.value = res.details?.violations || [];
+  } catch (error) {
+    localizationResult.value = {
+      icon: 'red',
+      title: 'Links',
+      description: `Error: ${error.message}`,
+    };
+  }
+}
+
 function getAdminUrl(url, type) {
-  if (!(/adobecom\.(hlx|aem)./.test(url.hostname))) return false;
-  const project = url.hostname === 'localhost' ? 'main--milo--adobecom' : url.hostname.split('.')[0];
-  const [branch, repo, owner] = project.split('--');
+  const crossRepo = CROSS_REPO_PREFIXES.find(({ prefix }) => url.pathname.startsWith(prefix));
+  let owner; let repo; let branch;
+  if (crossRepo) {
+    ({ owner, repo, branch } = crossRepo);
+  } else {
+    if (!(/adobecom\.(hlx|aem)./.test(url.hostname))) return false;
+    const project = url.hostname === 'localhost' ? 'main--milo--adobecom' : url.hostname.split('.')[0];
+    [branch, repo, owner] = project.split('--');
+  }
   const base = `https://admin.hlx.page/${type}/${owner}/${repo}/${branch}${url.pathname}`;
   return type === 'status' ? `${base}?editUrl=auto` : base;
 }
@@ -84,10 +152,8 @@ function findLinks(selector) {
     }, []);
 }
 
-async function setContent() {
-  if (content.value.page) return;
-
-  content.value = {
+export function runGeneralChecks() {
+  const contentValue = {
     page: { items: [{ url: new URL(window.location.href), edit: null, preview: 'Fetching', live: 'Fetching' }] },
     fragments: { items: findLinks('main .fragment, a[data-modal-path], [data-path]') },
     links: { items: findLinks('main a[href^="/"') },
@@ -95,6 +161,14 @@ async function setContent() {
     pdfs: { items: findLinks('main iframe') },
     nav: { items: findLinks('header a[href^="/"'), closed: true },
   };
+
+  return contentValue;
+}
+
+async function setContent() {
+  if (content.value.page) return;
+
+  content.value = runGeneralChecks();
 
   getStatuses();
   const sk = document.querySelector('aem-sidekick, helix-sidekick');
@@ -226,8 +300,45 @@ function ContentGroup({ name, group }) {
     </div>`;
 }
 
+function StructureItem({ icon, title, description }) {
+  return html`
+    <div class="preflight-item">
+      <div class="result-icon ${icon}"></div>
+      <div class="preflight-item-text">
+        <p class="preflight-item-title">${title}</p>
+        <p class="preflight-item-description">${description}</p>
+      </div>
+    </div>`;
+}
+
+function LocalizationIssuesList({ issues }) {
+  return html`
+    ${issues.length > 0 && html`
+      <div class="preflight-content-group${localizationClosed.value ? ' is-closed' : ''}">
+        <div class="preflight-group-row preflight-group-heading" onClick=${() => { localizationClosed.value = !localizationClosed.value; }}>
+          <div class="preflight-group-expand"></div>
+          <p class=preflight-content-heading>Faulty links</p>
+          <p class="preflight-content-heading">Loc</p>
+          <p class="preflight-content-heading">US status</p>
+          <p class="preflight-content-heading">Loc status</p>
+        </div>
+        <div class=preflight-group-items>
+          ${issues.map((v) => html`
+            <div class="preflight-group-row preflight-group-detail">
+              <p><a href=${v.url} target=_blank>${v.url}</a></p>
+              <p>${v.isLocalized ? 'Yes' : 'No'}</p>
+              <p>${v.usStatus}</p>
+              <p>${v.localizedStatus}</p>
+            </div>
+          `)}
+        </div>
+      </div>
+    `}
+  `;
+}
+
 export default function General() {
-  useEffect(() => { setContent(); }, []);
+  useEffect(() => { setContent(); getStructureResults(); getLocalizationResults(); }, []);
 
   const allChecked = Object.values(content.value)
     .flatMap((item) => item.items).filter((item) => item.checked);
@@ -243,6 +354,26 @@ export default function General() {
 
   return html`
     <div class=preflight-general-content>
+    <p class="preflight-structure-title">Structure</p>
+       <div class=preflight-structure-columns>
+        <div class=preflight-column>
+          <${StructureItem} ...${navResult.value} />
+          <${StructureItem} ...${footerResult.value} />
+          <${StructureItem} ...${regionSelectorResult.value} />
+        </div>
+        <div class=preflight-column>
+          <${StructureItem} ...${georoutingResult.value} />
+          <${StructureItem} ...${breadcrumbsResult.value} />
+        </div>
+      </div>
+      <p class="preflight-structure-title">Localization</p>
+      <div class=preflight-structure-columns>
+        <div class=preflight-column>
+          <${StructureItem} ...${localizationResult.value} />
+        </div>
+      </div>
+      <${LocalizationIssuesList} issues=${localizationIssues.value} />
+      <p class="preflight-structure-title">Content</p>
       ${Object.keys(content.value).map((key) => html`<${ContentGroup} name=${key} group=${content.value[key]} />`)}
     </div>
 

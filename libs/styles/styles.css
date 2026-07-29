@@ -9,6 +9,7 @@
   --global-height-navPromo: 72px;
   --feds-totalheight-nav: calc(var(--feds-height-nav, --global-height-nav) + var(--feds-height-breadcrumbs, --global-height-breadcrumbs));
   --feds-localnav-height: 40px;
+  --feds-language-banner-height: 44px;
 
   /* Colors */
   --link-color: rgb(39, 77, 234);
@@ -134,8 +135,16 @@
 }
 
 :root:lang(ar) {
-  --body-font-family: adobe-arabic, myriad-arabic, 'Adobe Clean', adobe-clean, 'Trebuchet MS', sans-serif;
+  --body-font-family: adobe-clean-arabic, 'Adobe Clean', adobe-clean, adobe-arabic, myriad-arabic, 'Trebuchet MS', sans-serif;
   --font-size-multiplier: 1.25;
+}
+
+:root:lang(he) {
+  --body-font-family: adobe-clean-hebrew, 'Adobe Clean', adobe-clean, myriad-hebrew, 'Trebuchet MS', sans-serif;
+}
+
+:root:lang(hi) {
+  --body-font-family: adobe-clean-devanagari, 'Adobe Clean', adobe-clean, myriad-devanagari, 'Trebuchet MS', sans-serif;
 }
 
 :root:lang(ko-KR),
@@ -489,7 +498,7 @@ picture.bg-img img {
 
 /* progressive section appearance */
 main > div,
-main .section[data-status='decorated'] {
+main .section:is([data-status='decorated'], [data-status='pending']) {
   display: none;
 }
 
@@ -764,7 +773,12 @@ header.global-navigation + .feds-localnav {
   height: var(--global-height-navPromo);
 }
 
-sr-only, .feds-sr-only {
+.language-banner {
+  height: var(--feds-language-banner-height);
+  visibility: hidden;
+}
+
+sr-only, .sr-only, .feds-sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -819,6 +833,10 @@ body.mweb-enabled {
 
 h1, h2, h3, h4, h5, h6 {
   scroll-margin-top: var(--feds-totalheight-nav);
+
+  span.hidden {
+    display: none;
+  }
 }
 
 :is(h1, h2, h3, h4, h5, h6) strong {
@@ -1035,6 +1053,23 @@ a.static:active  {
 
   header.gnav.has-breadcrumbs + main {
     margin-top: 97px;
+  }
+}
+
+/* tablet down */
+@media screen and (max-width: 1199px) {
+  /* Mweb specific changes for body typography */
+  .mweb-enabled {
+    --type-body-xxl-size: calc(var(--font-size-multiplier, 1) * 24px);
+    --type-body-xxl-lh: 36px;
+    --type-body-xl-size: calc(var(--font-size-multiplier, 1) * 20px);
+    --type-body-xl-lh: 30px;
+    --type-body-l-size: calc(var(--font-size-multiplier, 1) * 18px);
+    --type-body-l-lh: 27px;
+    --type-body-m-size: calc(var(--font-size-multiplier, 1) * 16px);
+    --type-body-m-lh: 24px;
+    --type-body-s-size: calc(var(--font-size-multiplier, 1) * 14px);
+    --type-body-s-lh: 21px;
   }
 }
 

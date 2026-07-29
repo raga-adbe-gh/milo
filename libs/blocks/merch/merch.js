@@ -1,11 +1,11 @@
 import {
-  createTag, getConfig, loadArea, loadScript, loadStyle, localizeLink, SLD, getMetadata,
-  shouldAllowKrTrial,
+  createTag, getConfig, loadArea, loadScript, loadStyle, localizeLinkAsync, getMetadata,
+  shouldAllowKrTrial, getCountry,
 } from '../../utils/utils.js';
 import { replaceKey } from '../../features/placeholders.js';
 
 // MAS Component Names
-export const MAS_COMMERCE_SERVICE = 'commerce';
+export const COMMERCE_LIBRARY = 'commerce';
 export const MAS_MERCH_CARD = 'merch-card';
 export const MAS_MERCH_CARD_COLLECTION = 'merch-card-collection';
 export const MAS_MERCH_MNEMONIC_LIST = 'merch-mnemonic-list';
@@ -14,6 +14,7 @@ export const MAS_MERCH_QUANTITY_SELECT = 'merch-quantity-select';
 export const MAS_MERCH_SECURE_TRANSACTION = 'merch-secure-transaction';
 export const MAS_MERCH_SIDENAV = 'merch-sidenav';
 export const MAS_MERCH_WHATS_INCLUDED = 'merch-whats-included';
+export const MAS_FIELD = 'mas-field';
 
 export const CHECKOUT_LINK_CONFIG_PATH = '/commerce/checkout-link.json'; // relative to libs.
 export const CHECKOUT_LINK_SANDBOX_CONFIG_PATH = '/commerce/checkout-link-sandbox.json'; // relative to libs.
@@ -22,9 +23,11 @@ export const PRICE_TEMPLATE_DISCOUNT = 'discount';
 export const PRICE_TEMPLATE_OPTICAL = 'optical';
 export const PRICE_TEMPLATE_REGULAR = 'price';
 export const PRICE_TEMPLATE_STRIKETHROUGH = 'strikethrough';
+export const PRICE_TEMPLATE_PROMO_STRIKETHROUGH = 'promo-strikethrough';
 export const PRICE_TEMPLATE_ANNUAL = 'annual';
 export const PRICE_TEMPLATE_LEGAL = 'legal';
 
+const isPreview = window.location.host.includes('aem.page') || window.location.host === 'www.stage.adobe.com';
 const PRICE_TEMPLATE_MAPPING = new Map([
   ['priceDiscount', PRICE_TEMPLATE_DISCOUNT],
   [PRICE_TEMPLATE_DISCOUNT, PRICE_TEMPLATE_DISCOUNT],
@@ -35,6 +38,7 @@ const PRICE_TEMPLATE_MAPPING = new Map([
   ['priceAnnual', PRICE_TEMPLATE_ANNUAL],
   [PRICE_TEMPLATE_ANNUAL, PRICE_TEMPLATE_ANNUAL],
   [PRICE_TEMPLATE_LEGAL, PRICE_TEMPLATE_LEGAL],
+  [PRICE_TEMPLATE_PROMO_STRIKETHROUGH, PRICE_TEMPLATE_PROMO_STRIKETHROUGH],
 ]);
 
 export const PLACEHOLDER_KEY_DOWNLOAD = 'download';
@@ -57,7 +61,8 @@ export const CC_SINGLE_APPS = [
   ['PHOTOSHOP', 'PHOTOSHOP_STOCK_BUNDLE'],
   ['PREMIERE', 'PREMIERE_STOCK_BUNDLE'],
   ['RUSH'],
-  ['XD'],
+  ['XD'], ['FIREFLY'],
+  ['CC_PRO_APPS'], ['NIMBUS_LIGHTROOM'], ['NIMBUS_LIGHTROOM_PHOTOSHOP'],
 ];
 
 const LanguageMap = {
@@ -88,7 +93,7 @@ const LanguageMap = {
   vi: 'VN',
 };
 
-const GeoMap = {
+export const GeoMap = {
   ar: 'AR_es',
   be_en: 'BE_en',
   be_fr: 'BE_fr',
@@ -114,7 +119,7 @@ const GeoMap = {
   gr_el: 'GR_el',
   gr_en: 'GR_en',
   ie: 'IE_en',
-  il_he: 'IL_iw',
+  il_he: 'IL_he',
   it: 'IT_it',
   lv: 'LV_lv',
   lt: 'LT_lt',
@@ -152,9 +157,9 @@ const GeoMap = {
   sa_ar: 'SA_ar',
   sa_en: 'SA_en',
   sg: 'SG_en',
-  cn: 'CN_zh-Hans',
-  tw: 'TW_zh-Hant',
-  hk_zh: 'HK_zh-hant',
+  cn: 'CN_zh',
+  tw: 'TW_zh',
+  hk_zh: 'HK_zh',
   jp: 'JP_ja',
   kr: 'KR_ko',
   za: 'ZA_en',
@@ -169,6 +174,12 @@ const GeoMap = {
   th_en: 'TH_en',
   th_th: 'TH_th',
 };
+
+/**
+ * MAS WCS `locale` when it differs from `${language}_${country}` derived from {@link GeoMap}.
+ * @type {Record<string, string>}
+ */
+const EXTRA_MAS_LOCALES = { pr: 'es_PR' };
 
 /**
  * Used when 3in1 modals are configured with ms=e or cs=t extra parameter, but 3in1 is disabled.
@@ -196,8 +207,8 @@ function getDefaultLangstoreCountry(language) {
   return country || 'US';
 }
 
-export function getMiloLocaleSettings(locale) {
-  const localePrefix = locale?.prefix || 'US_en';
+export function getMiloLocaleSettings(miloLocale) {
+  const localePrefix = miloLocale?.prefix || 'US_en';
   const geo = localePrefix.replace('/', '') ?? '';
   let [country = 'US', language = 'en'] = (GeoMap[geo] ?? geo).split('_', 2);
 
@@ -216,8 +227,32 @@ export function getMiloLocaleSettings(locale) {
   return {
     language,
     country,
-    locale: `${language}_${country}`,
+    locale: EXTRA_MAS_LOCALES[geo] ?? `${language}_${country}`,
   };
+}
+
+export async function getGeoLocaleSettings(miloLocale) {
+  const settings = getMiloLocaleSettings(miloLocale);
+  let country = await getCountry();
+  if (country) {
+    country = country.toUpperCase();
+    settings.country = country;
+  }
+  return settings;
+}
+
+export function isMasGeoDetectionEnabled() {
+  const queryParam = new URLSearchParams(window.location.search).get('mas-geo-detection');
+  const metaValue = getMetadata('mas-geo-detection');
+  const geoDetection = queryParam ?? metaValue;
+  return !!(geoDetection && ['on', 'true'].includes(geoDetection.toLowerCase()));
+}
+
+export async function getLocaleSettings(miloLocale) {
+  if (!isMasGeoDetectionEnabled()) {
+    return Promise.resolve(getMiloLocaleSettings(miloLocale));
+  }
+  return getGeoLocaleSettings(miloLocale);
 }
 
 /* Optional checkout link params that are appended to checkout urls as is */
@@ -294,8 +329,10 @@ export const CC_ALL_APPS = [
 const NAME_LOCALE = 'LOCALE';
 const NAME_PRODUCT_FAMILY = 'PRODUCT_FAMILY';
 const FREE_TRIAL_PATH = 'FREE_TRIAL_PATH';
+const CRM_PATH = 'CRM_PATH';
 const BUY_NOW_PATH = 'BUY_NOW_PATH';
 const FREE_TRIAL_HASH = 'FREE_TRIAL_HASH';
+const CRM_HASH = 'CRM_HASH';
 const BUY_NOW_HASH = 'BUY_NOW_HASH';
 const OFFER_TYPE_TRIAL = 'TRIAL';
 const LOADING_ENTITLEMENTS = 'loading-entitlements';
@@ -319,18 +356,8 @@ export function getMasBase(hostname, maslibs) {
     } else if (maslibs === 'local') {
       baseUrl = 'http://localhost:9001';
     } else if (maslibs) {
-      // Extract SLD (Second Level Domain) from hostname
-      const hostnameParts = hostname.split('.');
-      let sld = 'hlx'; // default
-      if (hostnameParts.length >= 2) {
-        // Get the second-to-last part (before .page or .live)
-        const extensionIndex = hostname.endsWith('.page') ? hostnameParts.length - 1 : hostnameParts.length;
-        if (extensionIndex >= 2) {
-          sld = hostnameParts[extensionIndex - 2];
-        }
-      }
       const extension = /.page$/.test(hostname) ? 'page' : 'live';
-      baseUrl = `https://${maslibs}.${sld}.${extension}`;
+      baseUrl = `https://${maslibs}.aem.${extension}`;
     } else {
       baseUrl = 'https://www.adobe.com/mas';
     }
@@ -340,35 +367,41 @@ export function getMasBase(hostname, maslibs) {
 }
 
 /**
- * Gets the base URL for loading web components based on maslibs parameter
- * @returns {string|null} Base URL for web components or null if maslibs not present
+ * Parses maslibs URL parameter and returns base URL
+ * @returns {string | null} Base URL or null if maslibs not present
  */
-export function getMasLibs() {
+export function getMasLibsBaseUrl() {
   const urlParams = new URLSearchParams(window.location.search);
   const masLibs = urlParams.get('maslibs');
 
   if (!masLibs || masLibs.trim() === '') return null;
 
-  const sanitizedMasLibs = masLibs.trim().toLowerCase();
+  const sanitized = masLibs.trim().toLowerCase();
 
-  if (sanitizedMasLibs === 'local') {
-    return 'http://localhost:3030/web-components/dist';
-  }
-  if (sanitizedMasLibs === 'main') {
-    return 'https://mas.adobe.com/web-components/dist';
+  if (sanitized === 'local') {
+    return 'http://localhost:3000';
   }
 
-  // Detect current domain extension (.page or .live)
-  const { hostname } = window.location;
-  const extension = hostname.endsWith('.page') ? 'page' : 'live';
+  if (sanitized === 'main') {
+    return 'https://main--mas--adobecom.aem.live';
+  }
 
-  if (sanitizedMasLibs.includes('--mas--')) {
-    return `https://${sanitizedMasLibs}.aem.${extension}/web-components/dist`;
+  let branch = sanitized;
+  if (!sanitized.includes('--')) {
+    branch = `${sanitized}--mas--adobecom`;
   }
-  if (sanitizedMasLibs.includes('--')) {
-    return `https://${sanitizedMasLibs}.aem.${extension}/web-components/dist`;
-  }
-  return `https://${sanitizedMasLibs}--mas--adobecom.aem.${extension}/web-components/dist`;
+
+  return `https://${branch}.aem.live`;
+}
+
+/**
+ * Gets the base URL for loading web components based on maslibs parameter
+ * @returns {string|null} Base URL for web components or null if maslibs not present
+ */
+export function getMasLibs() {
+  const baseUrl = getMasLibsBaseUrl();
+  if (!baseUrl) return null;
+  return `${baseUrl}/web-components/dist`;
 }
 
 /**
@@ -376,31 +409,9 @@ export function getMasLibs() {
  * @returns {string|null} URL for fragment-client.js or null if maslibs not present
  */
 function getFragmentClientUrl() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const masLibs = urlParams.get('maslibs');
-
-  if (!masLibs || masLibs.trim() === '') return null;
-
-  const sanitizedMasLibs = masLibs.trim().toLowerCase();
-
-  if (sanitizedMasLibs === 'local') {
-    return 'http://localhost:3030/studio/libs/fragment-client.js';
-  }
-  if (sanitizedMasLibs === 'main') {
-    return 'https://mas.adobe.com/studio/libs/fragment-client.js';
-  }
-
-  // Detect current domain extension (.page or .live)
-  const { hostname } = window.location;
-  const extension = hostname.endsWith('.page') ? 'page' : 'live';
-
-  if (sanitizedMasLibs.includes('--mas--')) {
-    return `https://${sanitizedMasLibs}.aem.${extension}/studio/libs/fragment-client.js`;
-  }
-  if (sanitizedMasLibs.includes('--')) {
-    return `https://${sanitizedMasLibs}.aem.${extension}/studio/libs/fragment-client.js`;
-  }
-  return `https://${sanitizedMasLibs}--mas--adobecom.aem.${extension}/studio/libs/fragment-client.js`;
+  const baseUrl = getMasLibsBaseUrl();
+  if (!baseUrl) return null;
+  return `${baseUrl}/studio/libs/fragment-client.js`;
 }
 
 /**
@@ -411,40 +422,56 @@ const failedExternalLoads = new Set();
 const loadingPromises = new Map();
 
 /**
- * Loads a MAS component either from external URL (if masLibs present) or local deps
+ * Generates the URL for loading a MAS component
+ * @param {string} componentName - Name of the component to load
+ * @param {string|null} masLibsBase - Base URL from getMasLibs() if available
+ * @param {string} hostname - Current hostname
+ * @returns {string} The URL to load the component from
+ */
+export function getMasComponentUrl(componentName, masLibsBase, hostname) {
+  if (masLibsBase) {
+    return `${masLibsBase}/${componentName}.js`;
+  }
+  const isAdobeProd = hostname === 'www.adobe.com';
+  return isAdobeProd
+    ? `https://www.adobe.com/mas/libs/${componentName}.js`
+    : `https://main--mas--adobecom.aem.live/web-components/dist/${componentName}.js`;
+}
+
+/**
+ * Loads a MAS component either from external URL (if masLibs present) or from production CDN
  * @param {string} componentName - Name of the component to load (e.g., 'commerce', 'merch-card')
  * @returns {Promise} Promise that resolves when component is loaded
  */
 export async function loadMasComponent(componentName) {
+  // Return existing loading promise if already in progress
   if (loadingPromises.has(componentName)) {
     return loadingPromises.get(componentName);
   }
 
+  // Component already loaded, return immediately
   if (customElements.get(componentName)) {
     return Promise.resolve();
   }
 
   const loadPromise = (async () => {
     const masLibsBase = getMasLibs();
+    const targetUrl = getMasComponentUrl(componentName, masLibsBase, window.location.hostname);
 
-    if (masLibsBase) {
-      const externalUrl = `${masLibsBase}/${componentName}.js`;
+    // Fail fast if this URL has already failed before
+    if (failedExternalLoads.has(targetUrl)) {
+      throw new Error(`Previously failed to load component from ${targetUrl}`);
+    }
 
-      if (failedExternalLoads.has(externalUrl)) {
-        throw new Error(`Failed to load component from ${externalUrl}`);
-      }
-
-      try {
-        return await import(externalUrl);
-      } catch (error) {
-        failedExternalLoads.add(externalUrl);
-        throw error;
-      }
-    } else {
-      return import(`../../deps/mas/${componentName}.js`);
+    try {
+      return await import(targetUrl);
+    } catch (error) {
+      failedExternalLoads.add(targetUrl);
+      throw error;
     }
   })();
 
+  // Cache the promise and clean up when done
   loadingPromises.set(componentName, loadPromise);
   loadPromise.finally(() => loadingPromises.delete(componentName));
 
@@ -468,6 +495,7 @@ export async function polyfills() {
       isSupported = true;
     },
   });
+
   if (isSupported) {
     polyfills.promise = Promise.resolve();
   } else {
@@ -505,11 +533,40 @@ export async function fetchCheckoutLinkConfigs(base = '', env = '') {
   return fetchCheckoutLinkConfigs.promise;
 }
 
+function getSvar(extraOptions) {
+  if (!extraOptions) return undefined;
+
+  const extraOptionsObj = JSON.parse(extraOptions);
+  return extraOptionsObj.svar;
+}
+
+function addToConfigsForMatchingProduct(config, productCode, svar, targetConfigs) {
+  const match = config[NAME_PRODUCT_FAMILY] === productCode || (svar && config[NAME_PRODUCT_FAMILY] === `${productCode}+${svar}`);
+  const alreadyThere = targetConfigs.some((item) => item[NAME_PRODUCT_FAMILY] === `${productCode}+${svar}`);
+  if (match && !alreadyThere) {
+    targetConfigs.push(config);
+  }
+}
+
+function addToConfigs(config, svar, configs, paCode, productCode, productFamily) {
+  addToConfigsForMatchingProduct(config, paCode, svar, configs.paCodeConfigs);
+  addToConfigsForMatchingProduct(config, productCode, svar, configs.productCodeConfigs);
+  addToConfigsForMatchingProduct(config, productFamily, svar, configs.productFamilyConfigs);
+}
+
 export async function getCheckoutLinkConfig(
   productFamily,
   productCode,
   paCode,
+  options,
 ) {
+  const extraOptions = options?.extraOptions;
+  const svar = getSvar(extraOptions);
+  if (svar) {
+    const extraOptionsObj = JSON.parse(extraOptions);
+    delete extraOptionsObj.svar;
+    options.extraOptions = JSON.stringify(extraOptionsObj);
+  }
   let { base } = getConfig();
   const { env } = getConfig();
   if (/\.page$/.test(document.location.origin)) {
@@ -520,16 +577,17 @@ export async function getCheckoutLinkConfig(
   if (!checkoutLinkConfigs.data.length) return undefined;
   const { locale: { region } } = getConfig();
 
+  // place items with extra options first
+  checkoutLinkConfigs.data.sort((itema, itemb) => {
+    const apf = itema[NAME_PRODUCT_FAMILY];
+    const bpf = itemb[NAME_PRODUCT_FAMILY];
+    return apf.includes('+') && !bpf.includes('+') ? -1 : 1;
+  });
+
   const { paCodeConfigs, productCodeConfigs, productFamilyConfigs } = checkoutLinkConfigs
     .data.reduce(
       (acc, config) => {
-        if (config[NAME_PRODUCT_FAMILY] === paCode) {
-          acc.paCodeConfigs.push(config);
-        } else if (config[NAME_PRODUCT_FAMILY] === productCode) {
-          acc.productCodeConfigs.push(config);
-        } else if (config[NAME_PRODUCT_FAMILY] === productFamily) {
-          acc.productFamilyConfigs.push(config);
-        }
+        addToConfigs(config, svar, acc, paCode, productCode, productFamily);
         return acc;
       },
       { paCodeConfigs: [], productCodeConfigs: [], productFamilyConfigs: [] },
@@ -562,6 +620,21 @@ export async function getCheckoutLinkConfig(
   return finalConfig;
 }
 
+/**
+ * If user has entitlement :
+ * for Acrobat Studio, the download CTA should be displayed for both Acrobat Studio and Pro,
+ * for all other Acrobat cards the download CTA will be displayed only for cards with
+ * matching product code.
+ */
+const DOWNLOAD_FAMILY_CODE = { ACROBAT: { ARCH: ['ARCH', 'APCC'] } };
+
+function showDownloadForCode(familySubscr, codeSubscr, codeCta) {
+  const family = DOWNLOAD_FAMILY_CODE[familySubscr];
+  if (!family) return true;
+
+  return family[codeSubscr]?.includes(codeCta) || codeSubscr === codeCta;
+}
+
 export async function getDownloadAction(
   options,
   imsSignedInPromise,
@@ -582,10 +655,12 @@ export async function getDownloadAction(
     offerFamily,
     productCode,
     productArrangementCode,
+    options,
   );
   if (!checkoutLinkConfig?.DOWNLOAD_URL) return undefined;
   const offer = entitlements.find(
-    ({ offer: { product_arrangement_v2: { family: subscriptionFamily } } }) => {
+    // eslint-disable-next-line max-len
+    ({ offer: { product_code: subscrCode, product_arrangement_v2: { family: subscriptionFamily } } }) => {
       if (CC_ALL_APPS.includes(subscriptionFamily)) return true; // has all apps
       if (CC_ALL_APPS.includes(offerFamily)) return false; // hasn't all apps and cta is all apps
       const singleAppFamily = CC_SINGLE_APPS.find(
@@ -593,7 +668,8 @@ export async function getDownloadAction(
           singleAppFamilies, // has single and and cta is single app
         ) => singleAppFamilies.includes(offerFamily),
       );
-      return singleAppFamily?.includes(subscriptionFamily);
+      return singleAppFamily?.includes(subscriptionFamily)
+      && showDownloadForCode(subscriptionFamily, subscrCode, productCode);
     },
   );
   if (!offer) return undefined;
@@ -602,7 +678,7 @@ export async function getDownloadAction(
     checkoutLinkConfig.DOWNLOAD_TEXT || PLACEHOLDER_KEY_DOWNLOAD,
     config,
   );
-  const url = localizeLink(checkoutLinkConfig.DOWNLOAD_URL);
+  const url = await localizeLinkAsync(checkoutLinkConfig.DOWNLOAD_URL);
   const type = offerType?.toLowerCase() ?? '';
   return { text, className: `download ${type}`, url };
 }
@@ -611,8 +687,11 @@ export async function getUpgradeAction(
   options,
   imsSignedInPromise,
   [{ productArrangement: { productFamily: offerFamily } = {} }],
+  el,
 ) {
   if (!options.upgrade) return undefined;
+  let SOURCE_PF;
+  let TARGET_PF;
   const loggedIn = await imsSignedInPromise;
   if (!loggedIn) return undefined;
   const entitlements = await fetchEntitlements();
@@ -623,6 +702,14 @@ export async function getUpgradeAction(
       '.merch-offers.upgrade [data-wcs-osi]',
     );
   }
+
+  if (upgradeOffer.getAttribute('data-wcs-osi') === 'V3W0kzf4e6M2Ht1hP9ZAt3dQNmhuDFrmYmEPlE2SlG0') {
+    SOURCE_PF = ['ACROBAT', 'ACROBAT_STOCK_BUNDLE', 'ACAI', 'APCC', 'apcc_direct_individual'];
+    TARGET_PF = ['ACROBAT'];
+  } else {
+    SOURCE_PF = CC_SINGLE_APPS_ALL;
+    TARGET_PF = CC_ALL_APPS;
+  }
   await upgradeOffer?.onceSettled();
   if (upgradeOffer && entitlements?.length && offerFamily) {
     const { default: handleUpgradeOffer } = await import('./upgrade.js');
@@ -630,9 +717,16 @@ export async function getUpgradeAction(
       offerFamily,
       upgradeOffer,
       entitlements,
-      CC_SINGLE_APPS_ALL,
-      CC_ALL_APPS,
+      SOURCE_PF,
+      TARGET_PF,
     );
+    if (upgradeAction) {
+      const merchCard = el?.closest('merch-card');
+      merchCard?.querySelector('merch-addon')?.remove();
+      merchCard?.querySelectorAll('[is="checkout-link"]').forEach((link) => {
+        if (link !== el) link.remove();
+      });
+    }
     return upgradeAction;
   }
   return undefined;
@@ -684,6 +778,18 @@ function appendExtraOptions(url, extraOptions) {
   return url;
 }
 
+export function applyPromo(url) {
+  const { mep } = getConfig();
+  const promoModal = mep?.inBlock?.merch?.fragments?.[url.pathname];
+  try {
+    const promoUrl = new URL(promoModal?.content);
+    return promoUrl;
+  } catch (e) {
+    log?.error('Failed to apply promo to external modal', e);
+  }
+  return url;
+}
+
 // TODO this should migrate to checkout.js buildCheckoutURL
 export function appendDexterParameters(url, extraOptions, el) {
   const isRelativePath = url.startsWith('/');
@@ -693,9 +799,13 @@ export function appendDexterParameters(url, extraOptions, el) {
       isRelativePath ? `${window.location.origin}${url}` : url,
     );
   } catch (err) {
-    window.lana?.log(`Invalid URL ${url} : ${err}`);
+    window.lana?.log(`Invalid URL ${url} : ${err}`, {
+      tags: 'merch',
+      severity: 'error',
+    });
     return url;
   }
+  absoluteUrl = applyPromo(absoluteUrl);
   absoluteUrl = appendExtraOptions(absoluteUrl, extraOptions);
   absoluteUrl = appendTabName(absoluteUrl, el);
   return isRelativePath
@@ -766,7 +876,7 @@ export async function updateModalState({ cta, closedByUser } = {}) {
   }
 
   const openedDialog = document.querySelector(`.dialog-modal${hash}`) || document.querySelector('.dialog-modal#checkout-link-modal');
-  const isLocaleModal = openedDialog?.id?.includes('locale-modal');
+  const isLocaleModal = openedDialog?.id?.includes('locale-modal') || openedDialog?.id?.includes('region-modal');
   const modal = isLocaleModal ? null : openedDialog;
 
   if (hash && !cta && modalState.isOpen && !modal) {
@@ -815,7 +925,7 @@ export async function updateModalState({ cta, closedByUser } = {}) {
   return modalState.isOpen;
 }
 
-export async function openModal(e, url, offerType, hash, extraOptions, el) {
+export async function openModal(e, urlParam, offerType, hash, extraOptions, el) {
   e.preventDefault();
   e.stopImmediatePropagation();
   if (modalState.isOpen) return;
@@ -835,6 +945,17 @@ export async function openModal(e, url, offerType, hash, extraOptions, el) {
     }
     return;
   }
+
+  let url = urlParam;
+  if (el?.dataset.modal === 'crm') {
+    const card = el.closest('merch-card');
+    const stock = card?.querySelector('merch-addon')?.shadowRoot?.querySelector('input[type="checkbox"]')?.checked;
+    const quantity = card?.querySelector('merch-quantity-select')?.shadowRoot?.querySelector('input[name="quantity"]')?.value;
+    const urlObj = new URL(url);
+    if (stock) urlObj.searchParams.set('stock', 'on');
+    if (quantity) urlObj.searchParams.set('qs', quantity);
+    if (stock || quantity) url = urlObj.toString();
+  }
   if (isInternalModal(url)) {
     const fragmentPath = url.split(/(hlx|aem).(page|live)/).pop();
     modal = await openFragmentModal(fragmentPath, getModal);
@@ -846,9 +967,13 @@ export async function openModal(e, url, offerType, hash, extraOptions, el) {
 
 export function setCtaHash(el, checkoutLinkConfig, offerType) {
   if (!(el && checkoutLinkConfig && offerType)) return undefined;
-  const hash = checkoutLinkConfig[
-    `${offerType === OFFER_TYPE_TRIAL ? FREE_TRIAL_HASH : BUY_NOW_HASH}`
-  ];
+  let columnName;
+  if (el.dataset.modal === 'crm' && !el.isOpen3in1Modal) {
+    columnName = CRM_HASH;
+  } else {
+    columnName = offerType === OFFER_TYPE_TRIAL ? FREE_TRIAL_HASH : BUY_NOW_HASH;
+  }
+  const hash = checkoutLinkConfig[columnName];
   if (hash) {
     el.setAttribute('data-modal-id', hash);
   }
@@ -863,7 +988,7 @@ const isProdModal = (url) => {
   }
 };
 
-export async function getModalAction(offers, options, el) {
+export async function getModalAction(offers, options, el, isMiloPreview = isPreview) {
   if (!options.modal) return undefined;
 
   const preload = new URLSearchParams(window.location.search).get('commerce.preload') !== 'off';
@@ -884,21 +1009,42 @@ export async function getModalAction(offers, options, el) {
       offerType,
       productArrangementCode,
       productArrangement: { productCode, productFamily: offerFamily } = {},
+      customerSegment,
+      marketSegments,
     },
   ] = offers ?? [{}];
   const checkoutLinkConfig = await getCheckoutLinkConfig(
     offerFamily,
     productCode,
     productArrangementCode,
+    options,
   );
   if (!checkoutLinkConfig) return undefined;
-  const columnName = offerType === OFFER_TYPE_TRIAL ? FREE_TRIAL_PATH : BUY_NOW_PATH;
+  let columnName;
+  if (el?.dataset.modal === 'crm' && !el?.isOpen3in1Modal) {
+    columnName = CRM_PATH;
+  } else {
+    columnName = offerType === OFFER_TYPE_TRIAL ? FREE_TRIAL_PATH : BUY_NOW_PATH;
+  }
   const hash = setCtaHash(el, checkoutLinkConfig, offerType);
   let url = checkoutLinkConfig[columnName];
+
+  if (url?.includes('|') && !el?.isOpen3in1Modal) {
+    const segment = el?.isCheckoutLink ? `${customerSegment}_${marketSegments?.[0]}` : '';
+    const segments = ['INDIVIDUAL_COM', 'TEAM_COM', 'INDIVIDUAL_EDU', 'TEAM_EDU'];
+    const index = segments.indexOf(segment) || 0;
+    url = url.split('|')[index].trim();
+  }
+
   if (!url && !el?.isOpen3in1Modal) return undefined;
-  url = isInternalModal(url) || isProdModal(url)
-    ? localizeLink(checkoutLinkConfig[columnName])
-    : checkoutLinkConfig[columnName];
+  const prodModalUrl = isProdModal(url);
+  if (isInternalModal(url) || prodModalUrl) {
+    const localized = await localizeLinkAsync(url, window.location.hostname, false, el);
+    url = prodModalUrl && !localized.startsWith('http')
+      ? `${new URL(url).origin}${localized}`
+      : localized;
+  }
+  url = isMiloPreview && prodModalUrl ? url.replace('https://www.adobe.com', 'https://www.stage.adobe.com') : url;
   return {
     url,
     handler: (e) => openModal(e, url, offerType, hash, options.extraOptions, el),
@@ -915,7 +1061,7 @@ export async function getCheckoutAction(
     await imsSignedInPromise;
     const [downloadAction, upgradeAction, modalAction] = await Promise.all([
       getDownloadAction(options, imsSignedInPromise, offers),
-      getUpgradeAction(options, imsSignedInPromise, offers),
+      getUpgradeAction(options, imsSignedInPromise, offers, el),
       getModalAction(offers, options, el),
     ]);
     return downloadAction || upgradeAction || modalAction;
@@ -926,11 +1072,19 @@ export async function getCheckoutAction(
 }
 
 export function setPreview(attributes) {
-  const { host } = window.location;
-  if (host.includes(`${SLD}.page`) || host === 'www.stage.adobe.com') {
+  if (isPreview) {
     attributes.preview = 'on';
   }
 }
+
+function isAnnualPriceEnabled(params) {
+  const annualEnabled = getMetadata('mas-ff-annual-price');
+  if (annualEnabled === 'true' || annualEnabled === 'on') {
+    return params?.get('annual') !== 'false';
+  }
+  return undefined;
+}
+
 /**
  * Activates commerce service and returns a promise resolving to its ready-to-use instance.
  */
@@ -961,43 +1115,44 @@ export async function initService(force = false, attributes = {}) {
   });
   initService.promise = initService.promise
     ?? polyfills().then(async () => {
-      await loadMasComponent(MAS_COMMERCE_SERVICE);
+      const useGeoMarket = isMasGeoDetectionEnabled();
 
-      // Load fragment-client.js when maslibs is present
+      // Load all independent resources in parallel
       const fragmentClientUrl = getFragmentClientUrl();
-      if (fragmentClientUrl) {
-        const { loadScript: loadScriptUtil } = await import('../../utils/utils.js');
-        try {
-          await loadScriptUtil(fragmentClientUrl, 'module');
-        } catch (e) {
-          log?.error('Failed to load fragment-client.js:', e);
-        }
-      }
+      const localeSettingsPromise = getLocaleSettings(miloLocale);
+      const [, , { language, locale, country }, validatedMarket] = await Promise.all([
+        loadMasComponent(COMMERCE_LIBRARY),
+        fragmentClientUrl
+          ? loadScript(fragmentClientUrl, 'module').catch((e) => {
+            log?.error('Failed to load fragment-client.js:', e);
+          })
+          : Promise.resolve(),
+        localeSettingsPromise,
+        useGeoMarket
+          ? import('../../utils/market.js').then(({ getValidatedMarket }) => getValidatedMarket())
+          : Promise.resolve(null),
+      ]);
 
-      const { language, locale, country } = getMiloLocaleSettings(miloLocale);
+      let countryFromMarket = country;
+      if (useGeoMarket && validatedMarket) countryFromMarket = validatedMarket.toUpperCase();
       let service = document.head.querySelector('mas-commerce-service');
       if (!service) {
         setPreview(attributes);
         service = createTag('mas-commerce-service', {
           locale,
           language,
+          country: countryFromMarket,
           ...attributes,
           ...commerce,
         });
         if (miloEnv?.name !== 'prod') {
           service.setAttribute('allow-override', '');
         }
-        const ffDefaults = getMetadata('mas-ff-defaults');
-        if (!ffDefaults) {
-          // On milo, if ff is not enabled explicitly, disable it by default
-          service.dataset.masFfDefaults = 'off';
-        }
         // Register checkout action if method exists (for backward compatibility)
         if (typeof service.registerCheckoutAction === 'function') {
           service.registerCheckoutAction(getCheckoutAction);
         }
         document.head.append(service);
-        await service.readyPromise;
 
         // Polyfill for older commerce service versions that don't have prefillWcsCache
         if (typeof service.prefillWcsCache !== 'function') {
@@ -1011,8 +1166,10 @@ export async function initService(force = false, attributes = {}) {
         service.imsSignedInPromise?.then((isSignedIn) => {
           if (isSignedIn) fetchEntitlements();
         });
+      } else if (useGeoMarket && countryFromMarket !== country) {
+        service.setAttribute('country', countryFromMarket);
       }
-      if (country === 'AU') {
+      if (isAnnualPriceEnabled()) {
         loadStyle(`${getConfig().base}/blocks/merch/au-merch.css`);
       }
       return service;
@@ -1029,6 +1186,101 @@ export async function getCommerceContext(el, params) {
       ?? el.closest('[data-promotion-code]')?.dataset.promotionCode)
     || undefined;
   return { promotionCode, perpetual, wcsOsi };
+}
+
+// TODO: remove this function once fallbackStep for DC is fully authored
+function getHardcodedFallbackStep(wcsOsi, checkoutClientId) {
+  if (checkoutClientId !== 'doc_cloud') return undefined;
+  const osiToStepMap = {
+    'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs': 'commitment',
+    'ZZQMV2cU-SWQoDxuznonUFMRdxSyTr4J3fB77YBNakY': 'commitment',
+    'vV01ci-KLH6hYdRfUKMBFx009hdpxZcIRG1-BY_PutE': 'recommendation',
+    'nTbB50pS4lLGv_x1l_UKggd-lxxo2zAJ7WYDa2mW19s': 'recommendation',
+    'QgYu51CVY2wKyFEqMuvec4N1tc1OaCypeKJjT5n2-Fc': 'commitment',
+    'AW-jV275GNYtPao6Q7XWENqyv_Stkc1BbzF7ak2u1dk': 'recommendation',
+    'nIy-IPGnALw3KNncaqMjOJsMUrqElWi8sdGnBFBAgTw': 'commitment',
+    WRe4gUHuyqJgCCr3ZywwU9CDP0ezBaCKoMk4xryVQhs: 'commitment',
+    Hnk2P6L5wYhnpZLFYTW5upuk2Y3AJXlso8VGWQ0l2TI: 'commitment',
+    '-lYm-YaTSZoUgv1gzqCgybgFotLqRsLwf8CgYdvdnsQ': 'commitment',
+    WJLr3TF4T4qyJIGZTsDf9KPbTfxA7qAgStpaF2IgYao: 'commitment',
+    '8Lr09qx_PHqAJUwvUNiof4FFFEKjsR1TTbvBUncV2b0': 'recommendation',
+    lI5NvdLBWJUJEHkP9CAx787kt0uCc3WnoCFVVIjECiA: 'recommendation',
+    'OQ1oCm1tZG35Gj7LCrkGeOOdUMfVlC7xx-7ml-CTWIE': 'commitment',
+    'VQpXGYJh-MBOcGPvokz_INgE88dj3KIyMJaU-iIQxlY': 'commitment',
+    'b-xXdWqVkpll0yBirom1c4bI3FwdXvNCy1HtHZV2yfU': 'commitment',
+    ZfP6XPHxvTFnOS_Hd4q9taPkKHinmf6PCozeJEmzqNI: 'recommendation',
+    'NNe0xkjqasLN3Q0ASuv3ZB4zSQW-iVN4TBoHOkQBEOA': 'commitment',
+    zX46r0tn5frbNvEMCdBg5WhZnq2hfl0qamka1iZGKTY: 'commitment',
+    '6hVc9P54QOeatmbtX4XyQ5zW2TE_O4TAiDCjQXUqJWI': 'recommendation',
+    TqjFogVsgvoHMvBD2LQgOXuNnrfsLmy0M9WK33I_A3k: 'recommendation',
+    V3W0kzf4e6M2Ht1hP9ZAt3dQNmhuDFrmYmEPlE2SlG0: 'recommendation',
+    x0LkInr7lGkqK8dcTFS_Pc6oHauo_g7N_4yWT_gLn20: 'recommendation',
+    SfkorgyrBAsqBVpyKddQQEn6jR0ItBohpXc74sZcKHg: 'recommendation',
+    'PVhDPYXq4fsy15OdlEE-XyIlvcxaPMxGs73pw39Cx-s': 'recommendation',
+    gW9NJdpWgZIt7aqMhaXWOZDGxw7fXoNWDidbAlbxmkM: 'recommendation',
+    PSR1sIFrfnd7GbeJoMVM5xPg2QaBubKxyIaDFGXTqoM: 'recommendation',
+    SaDEVpzcaBu6JtP_RjK0EJbNRSwiNX_UIaG8F4Lf8yI: 'recommendation',
+    cOOJwqv72rJWtLKhSHlrhrnVABtxdfjQ4lNcF1y5X2Q: 'recommendation',
+    KpLJEx0tFMmVCW4KU4bppGQg7o3OAebp8KNOnGLNgiw: 'recommendation',
+    'SBiUQ3H21rpQGs31u0-pGHX-jcpvjJSJYNxmFeEGDj8': 'recommendation',
+    F7YL_Ablk1mj4MF4FT32jzS7u_hNUsqt_UoaUEZkexk: 'recommendation',
+    'qwBmdeAU9yPBtbmSrO-TnwapD9-z6F4jIq1dHVUfIJk': 'recommendation',
+    mi2GqN0SGzU9eWxF1vn1MtsIQ7pP5PTSSKT5HnXi3Vg: 'recommendation',
+    eNe5xAVMmF6WtNDSifrDSsSfkmZxND76o060E1C6lJs: 'recommendation',
+    KtBGnaQbFxqhj1oFfUhfBv5ekrjjs6RNhsdUdpepncs: 'recommendation',
+    qrMZa9oQONjCdGbfO6JR1J9Bn_LLkrdnRAJNX4uFhxo: 'recommendation',
+    'ES77iNtc3eI6yGyTX448vllSQin-gkfD3Vqlismwk6g': 'recommendation',
+    'X_7yAluJ1_Y_sCBlmn5X9SMbPvgm-13QKiHQ3sP24Po': 'recommendation',
+    XCxvvwhW4bTMvdhQOqT2aKDhyKEK3RvWijc1ufcNXu8: 'recommendation',
+    'AxowWN4uq06O9UebM8yS1Nc6_DfFLkIsbSJvob-puoA': 'recommendation',
+    JbcIubaMmXtJqaArGtYvyUme1xZnchhMnuewoypvFGY: 'recommendation',
+    tB1vslYEbXdKzXW7m1EM2Yu1TaJimAtDdCO7ZgjnSC0: 'recommendation',
+    aiUTLe7MdD_Wkuzs_uyAH7wuQf0Ssv5ju0ab87rIG6A: 'recommendation',
+    'PXATerSqqGE5cZ4wN3_4fT6hwZ7enxL1LuLWn5CJ-Po': 'recommendation',
+    MPq85MQytgz4DH3qsgomuI0tzNxVJf1TuuqDHaMi_wc: 'recommendation',
+    zuIsmHec4TP5H2IIh1oGUn3roG_HRFiHh6LNsG5bwgY: 'recommendation',
+    'WqJNINLwUkui0QA0NTv-OxkqY0TP2KnZedACEvnfh6g': 'recommendation',
+    OmPhlAOindqQ4fvV4adVu1S44qcO5yVpzuWTUWDXPAo: 'recommendation',
+    '68YcfYFAr5FmEmynFDMYRMcHStNJkxYCPBBsUWh1qpQ': 'recommendation',
+    'yh5S74XAlRdtheBS1Q8avyBi-Ui400fgM5MYyCPhlaQ': 'recommendation',
+    BFbVVIHlzzEGqwBdqwIF5k6N0V_od5k9UVpFONYC7aQ: 'recommendation',
+    'oa-bRVTTC_EXxFaOlhZNYAfUHsNDJRJIxAN2cHU_lnw': 'recommendation',
+    'JzM9USGjYmbUcdPX-WoVwt458J81NkYz8KdL2hmB6ZY': 'recommendation',
+    'IGqwOFux-_4f56UGf1ilJS-rnsCjt0LrWfH7Csw7yF4': 'recommendation',
+    '_rYETpAnWKeCdn5GtQTZiuSUPQ9--uAXilfF1KMky68': 'recommendation',
+    I4tApjavP11Z52iores5zt_Az3eyzxlZHQchQHbN6zo: 'recommendation',
+    Z6Xvxln8V31ZfAF5lJnKM6bA3hpNaLRRotOjtVTXhVE: 'recommendation',
+    _nP3vmyJ78JBBnUtmSukdgWTnLAsNvGuITms2uRrJTo: 'recommendation',
+    '_oXYwJY-EaBPhYSlVuyYeWu9M8ADuiHwtQo64vHhHUM': 'recommendation',
+    'b2wqN8pAXvqJmrRKecLoiJjAZ_yPMsJgHpo-eAu8BDk': 'recommendation',
+  };
+  return osiToStepMap[wcsOsi];
+}
+
+export function isFallbackStepUsed({ modal, fallbackStep, wcsOsi, checkoutClientId }) {
+  const is3in1Modal = ['twp', 'd2p', 'crm'].includes(modal);
+  const masFF3in1 = document.querySelector('meta[name=mas-ff-3in1]');
+  const is3in1Enabled = !masFF3in1 || masFF3in1.content !== 'off';
+  return is3in1Modal && !is3in1Enabled && !!(fallbackStep
+  ?? getHardcodedFallbackStep(wcsOsi, checkoutClientId));
+}
+
+export function getWorkflowStep({
+  wcsOsi,
+  modal,
+  fallbackStep,
+  checkoutWorkflowStep,
+  checkoutClientId,
+}) {
+  if (!isFallbackStepUsed({
+    modal,
+    fallbackStep,
+    wcsOsi,
+    checkoutClientId,
+  })) return checkoutWorkflowStep;
+  return fallbackStep
+    ?? getHardcodedFallbackStep(wcsOsi, checkoutClientId)
+    ?? checkoutWorkflowStep;
 }
 
 /**
@@ -1053,6 +1305,7 @@ export async function getCheckoutContext(el, params) {
   const entitlement = params?.get('entitlement');
   const upgrade = params?.get('upgrade');
   const modal = params?.get('modal');
+  const fallbackStep = params?.get('fallbackStep');
 
   const extraOptions = {};
   params.forEach((value, key) => {
@@ -1064,11 +1317,23 @@ export async function getCheckoutContext(el, params) {
   return {
     ...context,
     checkoutClientId,
-    checkoutWorkflowStep,
+    checkoutWorkflowStep: getWorkflowStep({
+      wcsOsi: context.wcsOsi,
+      modal,
+      fallbackStep,
+      checkoutWorkflowStep,
+      checkoutClientId,
+    }),
     checkoutMarketSegment,
     entitlement,
     upgrade,
-    modal,
+    modal: isFallbackStepUsed({
+      modal,
+      fallbackStep,
+      wcsOsi: context.wcsOsi,
+      checkoutClientId,
+    }) ? undefined : modal,
+    fallbackStep,
     extraOptions: JSON.stringify(extraOptions),
   };
 }
@@ -1076,15 +1341,15 @@ export async function getCheckoutContext(el, params) {
 export async function getPriceContext(el, params) {
   const context = await getCommerceContext(el, params);
   if (!context) return null;
-  const annualEnabled = getMetadata('mas-ff-annual-price');
   const displayOldPrice = context.promotionCode ? params.get('old') : undefined;
   const displayPerUnit = params.get('seat');
   const displayRecurrence = params.get('term');
   const displayTax = params.get('tax');
   const displayPlanType = params.get('planType');
-  const displayAnnual = (annualEnabled && params.get('annual') !== 'false') || undefined;
+  const displayAnnual = isAnnualPriceEnabled(params);
   const forceTaxExclusive = params.get('exclusive');
   const alternativePrice = params.get('alt');
+  const quantity = params.get('quantity');
   // The PRICE_TEMPLATE_MAPPING supports legacy OST links
   const template = PRICE_TEMPLATE_MAPPING.get(params.get('type')) ?? PRICE_TEMPLATE_REGULAR;
   return {
@@ -1098,6 +1363,7 @@ export async function getPriceContext(el, params) {
     forceTaxExclusive,
     alternativePrice,
     template,
+    quantity,
   };
 }
 
@@ -1113,6 +1379,60 @@ export async function addAriaLabelToCta(cta) {
     ? `${ariaLabel} - ${await replaceKey(segment, getConfig())}`
     : ariaLabel;
   cta.setAttribute('aria-label', ariaLabel);
+}
+
+function escapeRegExp(value = '') {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function syncUpgradeAriaLabel(cta, originalText) {
+  if (!cta?.classList?.contains('upgrade')) return;
+
+  const resolvedText = cta.textContent?.trim();
+  const currentAriaLabel = cta.getAttribute('aria-label')?.trim();
+  const authoredText = originalText?.trim();
+  if (!resolvedText || !currentAriaLabel || !authoredText) return;
+
+  if (currentAriaLabel.toLowerCase().startsWith(resolvedText.toLowerCase())) return;
+
+  const authoredTextPrefix = new RegExp(`^${escapeRegExp(authoredText)}\\b`, 'i');
+  if (!authoredTextPrefix.test(currentAriaLabel)) return;
+
+  cta.setAttribute('aria-label', currentAriaLabel.replace(authoredTextPrefix, resolvedText));
+}
+
+function observeUpgradeAriaLabel(cta, originalText) {
+  let observer;
+  const trySync = () => {
+    syncUpgradeAriaLabel(cta, originalText);
+
+    const resolvedText = cta?.textContent?.trim();
+    const currentAriaLabel = cta?.getAttribute('aria-label')?.trim();
+    if (
+      cta?.classList?.contains('upgrade')
+      && resolvedText
+      && currentAriaLabel?.toLowerCase().startsWith(resolvedText.toLowerCase())
+    ) {
+      observer?.disconnect();
+    }
+  };
+
+  if (typeof MutationObserver === 'undefined') {
+    cta.onceSettled().then(trySync);
+    return;
+  }
+
+  observer = new MutationObserver(trySync);
+  observer.observe(cta, {
+    attributes: true,
+    attributeFilter: ['class', 'aria-label'],
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+
+  cta.onceSettled().then(trySync);
+  setTimeout(() => observer.disconnect(), 5000);
 }
 
 export async function buildCta(el, params) {
@@ -1135,6 +1455,10 @@ export async function buildCta(el, params) {
     cta.classList.toggle('blue', strong);
   }
 
+  if (params.get('target') === '_blank') {
+    cta.setAttribute('target', '_blank');
+  }
+
   const customClasses = el.href.matchAll(/#_button-([a-zA-Z-]+)/g);
   for (const match of customClasses) {
     cta.classList.add(match[1]);
@@ -1144,7 +1468,7 @@ export async function buildCta(el, params) {
     cta.classList.add(LOADING_ENTITLEMENTS);
     cta.onceSettled().finally(() => {
       cta.classList.remove(LOADING_ENTITLEMENTS);
-      updateModalState({ cta });
+      if (!cta.closest('[role="tabpanel"][hidden]')) updateModalState({ cta });
     });
   }
 
@@ -1157,6 +1481,7 @@ export async function buildCta(el, params) {
       await addAriaLabelToCta(cta);
     });
   }
+  observeUpgradeAriaLabel(cta, text);
 
   if (getMetadata('mas-ff-copy-cta') === 'on') {
     const { default: addCopyToClipboard } = await import(
@@ -1170,23 +1495,59 @@ export async function buildCta(el, params) {
    * @see https://jira.corp.adobe.com/browse/MWPW-173470
    * @see https://jira.corp.adobe.com/browse/MWPW-174411
    */
-  cta.onceSettled().then(() => {
-    const prefix = getConfig()?.locale?.prefix;
-    if (!(prefix === '/kr' && cta.value[0]?.offerType === OFFER_TYPE_TRIAL)) return;
-    if (shouldAllowKrTrial(el, prefix)) {
-      cta.classList.remove('hidden-osi-trial-link');
-      return;
+  const localePrefix = getConfig()?.locale?.prefix;
+  if (localePrefix === '/kr') {
+    const hasAllowKrTrial = shouldAllowKrTrial(el, localePrefix);
+    const hasAllowKrTrialMeta = getMetadata('allow-kr-free-trial') === 'on';
+    const elAlreadyHasAllow = el.getAttribute('data-allow-kr-free-trial') === 'true';
+
+    if (hasAllowKrTrial || hasAllowKrTrialMeta || elAlreadyHasAllow) {
+      cta.setAttribute('data-allow-kr-free-trial', 'true');
+      return cta;
     }
-    cta.remove();
-  });
+
+    cta.setAttribute('data-hide-kr-free-trial', crypto.randomUUID());
+    cta.onceSettled().then(() => {
+      const uuid = cta.getAttribute('data-hide-kr-free-trial');
+      const { offerType: ctaOfferType } = cta.value?.[0] || {};
+      if (ctaOfferType === OFFER_TYPE_TRIAL) cta.remove();
+      else cta.removeAttribute('data-hide-kr-free-trial');
+
+      const ctaClone = [...document.querySelectorAll(`[data-hide-kr-free-trial="${uuid}"]`)]
+        .find((clone) => clone !== cta);
+      if (!ctaClone) return;
+      const { offerType: cloneOfferType } = ctaClone.value?.[0] || {};
+      if (!cloneOfferType || cloneOfferType === OFFER_TYPE_TRIAL) ctaClone.remove();
+      else ctaClone.removeAttribute('data-hide-kr-free-trial');
+    });
+  }
 
   return cta;
+}
+
+export function shouldHideStPriceLabels(element) {
+  const nextElSibling = element.nextElementSibling?.nodeName === 'BR'
+    ? element.nextElementSibling.nextElementSibling
+    : element.nextElementSibling;
+
+  const href = nextElSibling?.getAttribute('href');
+  return !!(
+    (element.nextSibling?.nodeName !== '#text'
+      || element.nextSibling.textContent.trim().length < 2)
+    && href?.match('/tools/ost[?]osi=.*type=price')
+  );
 }
 
 async function buildPrice(el, params) {
   const context = await getPriceContext(el, params);
   if (!context) return null;
   const service = await initService();
+
+  if (context.template === 'strikethrough' && shouldHideStPriceLabels(el)) {
+    context.displayPerUnit = 'false';
+    context.displayTax = 'false';
+  }
+
   const price = service.createInlinePrice(context);
   return price;
 }
@@ -1205,14 +1566,45 @@ export function overrideOptions(fragment, options) {
   return options;
 }
 
+export function createAemFragment(options, seenFragments = null) {
+  const { fragment, pzn, mask } = options;
+  const cacheKey = `${fragment}|${pzn || ''}|${mask || ''}`;
+  const attrs = Object.fromEntries(
+    Object.entries({ pzn, mask, fragment }).filter(([, v]) => v != null),
+  );
+  if (seenFragments?.has(cacheKey)) attrs.loading = 'cache';
+  seenFragments?.add(cacheKey);
+  return createTag('aem-fragment', attrs);
+}
+
 export function getOptions(el) {
   const { hash } = new URL(el.href);
   const hashValue = hash.startsWith('#') ? hash.substring(1) : hash;
   const searchParams = new URLSearchParams(hashValue);
   const options = {};
   for (const [key, value] of searchParams.entries()) {
-    if (key === 'sidenav') options.sidenav = value === 'true';
-    else if (key === 'fragment' || key === 'query') options.fragment = value;
+    switch (key) {
+      case 'sidenav':
+        options.sidenav = value === 'true';
+        break;
+
+      case 'fragment':
+      case 'query':
+        options.fragment = value;
+        break;
+
+      case 'mask':
+      case 'pzn':
+      case 'field':
+        options[key] = value;
+        break;
+
+      case 'jsonld':
+        options.jsonld = value === 'on';
+        break;
+      default:
+        break;
+    }
   }
   return options;
 }
@@ -1226,11 +1618,46 @@ export default async function init(el) {
   log = service.Log.module('merch');
   if (merch) {
     log.debug('Rendering:', { options: { ...merch.dataset }, merch, el });
+    // Rebuilt merch href keeps only the OSI; stash the original for
+    // the "Edit OSI" badge.
+    if (getConfig()?.mep?.preview) {
+      const { mepMasStudioUrls } = await import('./mas-mep-utils.js');
+      mepMasStudioUrls.set(merch, el.href);
+      merch.dataset.masBlock = 'ost';
+    }
     el.replaceWith(merch);
     return merch;
   }
   log.warn('Failed to get context:', { el });
   return null;
+}
+
+const MAS_FRAGMENT_API = 'https://www.adobe.com/mas/io/fragment';
+const MAS_FRAGMENT_API_KEY = 'wcms-commerce-ims-ro-user-milo';
+
+export function isMasErrorEnv(host = window.location.host) {
+  return host.includes('localhost') || host.includes('.aem.page');
+}
+
+export async function createFragmentErrorEl(uuid, label = 'Card', status = null) {
+  loadStyle(`${getConfig().base}/blocks/merch/merch.css`);
+  let badge = 'Load Error';
+  if (status === 404) {
+    badge = 'Not Found';
+  } else if (uuid) {
+    try {
+      const { locale } = getMiloLocaleSettings(getConfig()?.locale);
+      const source = isMasErrorEnv() ? '&source=aem' : '';
+      const res = await fetch(`${MAS_FRAGMENT_API}?id=${uuid}&api_key=${MAS_FRAGMENT_API_KEY}&locale=${locale}${source}`);
+      if (res.status === 404) badge = 'Not Found';
+    } catch { /* network error */ }
+  }
+  const el = createTag('div', { class: 'mas-frag-error' });
+  const badgeEl = createTag('span', { class: 'mas-frag-error-badge' }, badge);
+  const labelEl = createTag('p', { class: 'mas-frag-error-label' }, `${label}:`);
+  const idEl = createTag('p', { class: 'mas-frag-error-id' }, uuid || 'unknown');
+  el.append(badgeEl, labelEl, idEl);
+  return el;
 }
 
 window.addEventListener('hashchange', updateModalState);

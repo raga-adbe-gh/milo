@@ -1,3 +1,4 @@
+/* eslint-disable no-underscore-dangle */
 import { expect } from '@esm-bundle/chai';
 import { readFile } from '@web/test-runner-commands';
 import { assert, stub } from 'sinon';
@@ -5,6 +6,7 @@ import { getConfig, setConfig } from '../../../libs/utils/utils.js';
 import {
   handleFragmentCommand, applyPers, cleanAndSortManifestList, normalizePath,
   init, matchGlob, createContent, combineMepSources, buildVariantInfo, addSectionAnchors,
+  isTrustedUrl, fetchData, DATA_TYPE, categorizeActions,
 } from '../../../libs/features/personalization/personalization.js';
 import mepSettings from './mepSettings.js';
 import mepSettingsPreview from './mepPreviewSettings.js';
@@ -107,6 +109,7 @@ describe('Functional Test', () => {
       targetEnabled: false,
       experiments: [],
       promises: {},
+      consentState: { performance: true, advertising: true },
     };
     const promoMepSettings = [
       {
@@ -133,6 +136,32 @@ describe('Functional Test', () => {
       handleFragmentCommand,
       preview: false,
       variantOverride: {},
+      highlight: false,
+      targetEnabled: false,
+      experiments: [],
+      promises: {},
+    };
+    const promoMepSettings = [
+      {
+        manifestPath: '/promos/blackfriday/manifest.json',
+        disabled: true,
+        event: { name: 'blackfriday', start: new Date('2022-11-24T13:00:00+00:00'), end: new Date('2022-11-24T13:00:00+00:00') },
+      },
+    ];
+    await loadManifestAndSetResponse('./mocks/manifestScheduledInactive.json');
+    expect(document.querySelector('a[href="/fragments/insertafter4"]')).to.be.null;
+    await applyPers({ manifests: promoMepSettings });
+
+    const fragment = document.querySelector('a[href="/fragments/insertafter4"]');
+    expect(fragment).to.be.null;
+  });
+
+  it('disabled manifest should stay disabled even when variantOverride exists for another manifest', async () => {
+    const config = getConfig();
+    config.mep = {
+      handleFragmentCommand,
+      preview: false,
+      variantOverride: { '/other/manifest.json': 'default' },
       highlight: false,
       targetEnabled: false,
       experiments: [],
@@ -383,6 +412,145 @@ describe('Functional Test', () => {
     expect(document.querySelector('meta[property="og:image"]').content).to.equal('https://adobe.com/path/to/image.jpg');
   });
 
+  it('updateFramework should create new framework stylesheet link', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    const c1Link = document.createElement('link');
+    c1Link.rel = 'stylesheet';
+    c1Link.href = `${libsPath}/styles/styles.css`;
+    document.head.appendChild(c1Link);
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', '');
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)).to.not.be.null;
+
+    document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)?.remove();
+    document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)?.remove();
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', '');
+  });
+
+  it('updateFramework should no-op when already on target foundation', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', 'c2');
+    const c2Link = document.createElement('link');
+    c2Link.rel = 'stylesheet';
+    c2Link.href = `${libsPath}/c2/styles/styles.css`;
+    document.head.appendChild(c2Link);
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)).to.not.be.null;
+
+    document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)?.remove();
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', '');
+  });
+
+  it('updateFramework should no-op when value is undefined', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    const c1Link = document.createElement('link');
+    c1Link.rel = 'stylesheet';
+    c1Link.href = `${libsPath}/styles/styles.css`;
+    document.head.appendChild(c1Link);
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    delete manifestJson.data[0].all;
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)).to.not.be.null;
+    document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)?.remove();
+  });
+
+  it('updateFramework should no-op when value is empty string', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    const c1Link = document.createElement('link');
+    c1Link.rel = 'stylesheet';
+    c1Link.href = `${libsPath}/styles/styles.css`;
+    document.head.appendChild(c1Link);
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    manifestJson.data[0].all = '';
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)).to.not.be.null;
+    document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)?.remove();
+  });
+
+  it('updateFramework should no-op for invalid values', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    const c1Link = document.createElement('link');
+    c1Link.rel = 'stylesheet';
+    c1Link.href = `${libsPath}/styles/styles.css`;
+    document.head.appendChild(c1Link);
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    manifestJson.data[0].all = 'banana';
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)).to.not.be.null;
+    document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)?.remove();
+  });
+
+  it('updateFramework should create C1 stylesheet link when switching from C2', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    const c2Link = document.createElement('link');
+    c2Link.rel = 'stylesheet';
+    c2Link.href = `${libsPath}/c2/styles/styles.css`;
+    document.head.appendChild(c2Link);
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', 'c2');
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    manifestJson.data[0].all = 'c1';
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)).to.not.be.null;
+
+    document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)?.remove();
+    document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)?.remove();
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', '');
+  });
+
+  it('updateFramework should handle case-insensitive values', async () => {
+    const config = getConfig();
+    const libsPath = config.miloLibs || config.codeRoot;
+    const c1Link = document.createElement('link');
+    c1Link.rel = 'stylesheet';
+    c1Link.href = `${libsPath}/styles/styles.css`;
+    document.head.appendChild(c1Link);
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', '');
+
+    let manifestJson = await readFile({ path: './mocks/actions/manifestUpdateFramework.json' });
+    manifestJson = JSON.parse(manifestJson);
+    manifestJson.data[0].all = 'C2';
+    setFetchResponse(manifestJson);
+    await init(mepSettings);
+
+    expect(document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)).to.not.be.null;
+
+    document.head.querySelector(`link[href="${libsPath}/styles/styles.css"]`)?.remove();
+    document.head.querySelector(`link[href="${libsPath}/c2/styles/styles.css"]`)?.remove();
+    document.querySelector('meta[name="foundation"]')?.setAttribute('content', '');
+  });
+
   it('will add id to the section div', async () => {
     addSectionAnchors(document);
     const sectionWithId = document.querySelector('#marquee-container');
@@ -415,7 +583,7 @@ describe('matchGlob function', () => {
     const parent = document.createElement('div');
     const el = document.createElement('div');
     parent.appendChild(el);
-    const wrapper = createContent(
+    const wrapper = await createContent(
       el,
       {
         content: '/fragments/promos/path-to-promo/#modal-hash:delay=1',
@@ -461,6 +629,203 @@ describe('MEP Utils', () => {
       expect(manifests[3].manifestPath).to.equal('/mep-param/manifest1.json');
       expect(manifests[4].manifestPath).to.equal('/mep-param/manifest2.json');
     });
+    it('blocks absolute manifest URLs from mep param', async () => {
+      const manifests = await combineMepSources(
+        undefined,
+        undefined,
+        undefined,
+        'https://attacker.com/manifest.json--all---https://evil.github.io/manifest--all',
+      );
+      expect(manifests.length).to.equal(0);
+    });
+    it('blocks trusted absolute manifest URLs from mep param', async () => {
+      const manifests = await combineMepSources(
+        undefined,
+        undefined,
+        undefined,
+        'https://www.adobe.com/manifest.json--all',
+      );
+      expect(manifests.length).to.equal(0);
+    });
+    it('blocks protocol-relative manifest URLs from mep param', async () => {
+      const manifests = await combineMepSources(
+        undefined,
+        undefined,
+        undefined,
+        '//evil.com/manifest.json--all',
+      );
+      expect(manifests.length).to.equal(0);
+    });
+    it('blocks manifest URLs that normalize to a cross-origin host', async () => {
+      const manifests = await combineMepSources(
+        undefined,
+        undefined,
+        undefined,
+        [
+          '/\\evil.com/manifest.json--all',
+          '\\/evil.com/manifest.json--all',
+          '/\t/evil.com/manifest.json--all',
+          '/\n/evil.com/manifest.json--all',
+          '/\r/evil.com/manifest.json--all',
+        ].join('---'),
+      );
+      expect(manifests.length).to.equal(0);
+    });
+    it('blocks untrusted manifest URLs from personalization sources', async () => {
+      const persValue = [
+        '/\\evil.com/manifest.json',
+        '\\/evil.com/manifest.json',
+        'https://attacker.com/manifest.json',
+      ].join(',');
+      const manifests = await combineMepSources(
+        persValue,
+        persValue,
+        undefined,
+        undefined,
+        persValue,
+      );
+      expect(manifests.length).to.equal(0);
+    });
+    it('blocks malformed scheme prefixes across all personalization sources', async () => {
+      const bypassValue = [
+        'https:/evil.com/manifest.json',
+        'https:\\evil.com/manifest.json',
+        'HTTPS:/evil.com/manifest.json',
+        'http:/evil.com/manifest.json',
+      ].join(',');
+      const manifests = await combineMepSources(
+        bypassValue,
+        bypassValue,
+        undefined,
+        undefined,
+        bypassValue,
+      );
+      expect(manifests.length).to.equal(0);
+    });
+    it('allows trusted AEM-hosted manifest URLs from personalization sources', async () => {
+      const aemUrl = 'https://main--milo--adobecom.aem.page/path/manifest.json';
+      const manifests = await combineMepSources(aemUrl, undefined, undefined, undefined);
+      expect(manifests.length).to.equal(1);
+      expect(manifests[0].manifestPath).to.equal(aemUrl);
+    });
+    it('allows relative manifest URLs from personalization sources', async () => {
+      const manifests = await combineMepSources('/promos/manifest.json', undefined, undefined, undefined);
+      expect(manifests.length).to.equal(1);
+      expect(manifests[0].manifestPath).to.equal('/promos/manifest.json');
+    });
+    it('allows relative path manifest URLs from mep param', async () => {
+      const manifests = await combineMepSources(
+        undefined,
+        undefined,
+        undefined,
+        '/path/manifest.json--all',
+      );
+      expect(manifests.length).to.equal(1);
+    });
+    it('allows federal manifest via mep param alongside repo manifests', async () => {
+      const manifests = await combineMepSources(
+        undefined,
+        undefined,
+        undefined,
+        '/homepage/fragments/tests/site-redesign.json--target-var1---/federal/tests/mep/ace1151/ace1151-gnav-and-banners.json--all',
+      );
+      expect(manifests.length).to.equal(2);
+      expect(manifests[0].manifestPath).to.equal('/homepage/fragments/tests/site-redesign.json');
+      expect(manifests[1].manifestPath).to.equal('/federal/tests/mep/ace1151/ace1151-gnav-and-banners.json');
+    });
+  });
+  describe('isTrustedUrl', () => {
+    it('allows relative paths', () => {
+      expect(isTrustedUrl('/path/to/script.js')).to.be.true;
+      expect(isTrustedUrl('/content/dam/cc/test.js')).to.be.true;
+    });
+    it('allows trusted Adobe domains', () => {
+      expect(isTrustedUrl('https://www.adobe.com/content/dam/cc/test.js')).to.be.true;
+      expect(isTrustedUrl('https://main--milo--adobecom.aem.page/script.js')).to.be.true;
+      expect(isTrustedUrl('https://main--milo--adobecom.aem.live/script.js')).to.be.true;
+      expect(isTrustedUrl('https://main--milo--adobecom.hlx.page/script.js')).to.be.true;
+      expect(isTrustedUrl('https://main--milo--adobecom.hlx.live/script.js')).to.be.true;
+    });
+    it('blocks untrusted external URLs', () => {
+      expect(isTrustedUrl('https://attacker.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https://evil.github.io/script.js')).to.be.false;
+      expect(isTrustedUrl('https://attacker.com/content/dam/fake.js')).to.be.false;
+    });
+    it('blocks non-adobecom aem/hlx domains', () => {
+      expect(isTrustedUrl('https://evil--project--inc.aem.page/manifest.json')).to.be.false;
+      expect(isTrustedUrl('https://evil--project--inc.hlx.live/script.js')).to.be.false;
+      expect(isTrustedUrl('https://evildomainadobecom.hlx.page/script.js')).to.be.false;
+    });
+    it('blocks non-https protocols', () => {
+      expect(isTrustedUrl('http://www.adobe.com/script.js')).to.be.false;
+      expect(isTrustedUrl('data:text/javascript,alert(1)')).to.be.false;
+    });
+    it('blocks null/empty values', () => {
+      expect(isTrustedUrl(null)).to.be.false;
+      expect(isTrustedUrl(undefined)).to.be.false;
+      expect(isTrustedUrl('')).to.be.false;
+    });
+    it('blocks protocol-relative URLs', () => {
+      expect(isTrustedUrl('//evil.com/script.js')).to.be.false;
+    });
+    it('rejects URLs that normalize to a cross-origin host', () => {
+      expect(isTrustedUrl('/\\evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('\\/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('/\t/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('/\n/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('/\r/evil.com/script.js')).to.be.false;
+    });
+    it('rejects malformed scheme prefixes (CDN slash-collapse bypass)', () => {
+      expect(isTrustedUrl('https:/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https:\\evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https:\\\\evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('HTTPS:/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('HtTpS:/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https:evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('http:/evil.com/script.js')).to.be.false;
+      // eslint-disable-next-line no-script-url
+      expect(isTrustedUrl('javascript:alert(1)')).to.be.false;
+    });
+    it('rejects additional scheme-prefix edge cases', () => {
+      expect(isTrustedUrl('https:foo')).to.be.false;
+      expect(isTrustedUrl('https:\t/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https:\n/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('﻿https:/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl(' https:/evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https:///evil.com/script.js')).to.be.false;
+      expect(isTrustedUrl('https:////evil.com/script.js')).to.be.false;
+    });
+    it('safe-by-accident: IDN homograph hostnames blocked because parser punycodes them', () => {
+      expect(isTrustedUrl('https://www.аdobe.com/script.js')).to.be.false;
+    });
+    it('rejects non-string inputs', () => {
+      expect(isTrustedUrl(123)).to.be.false;
+      expect(isTrustedUrl({})).to.be.false;
+      expect(isTrustedUrl([])).to.be.false;
+    });
+  });
+  describe('fetchData', () => {
+    it('forwards redirect option to underlying fetch', async () => {
+      const originalFetch = window.fetch;
+      const fetchStub = stub().returns(getFetchPromise({}));
+      window.fetch = fetchStub;
+      try {
+        await fetchData('/manifest.json', DATA_TYPE.JSON, { redirect: 'error' });
+        expect(fetchStub.firstCall.args[1]?.redirect).to.equal('error');
+      } finally {
+        window.fetch = originalFetch;
+      }
+    });
+    it('returns null when fetch throws (simulating blocked redirect)', async () => {
+      const originalFetch = window.fetch;
+      window.fetch = stub().throws(new TypeError('Failed to fetch'));
+      try {
+        const result = await fetchData('/manifest.json', DATA_TYPE.JSON, { redirect: 'error' });
+        expect(result).to.be.null;
+      } finally {
+        window.fetch = originalFetch;
+      }
+    });
   });
   describe('cleanAndSortManifestList', async () => {
     it('chooses server manifest over target manifest if same manifest path', async () => {
@@ -502,5 +867,105 @@ describe('MEP Utils', () => {
       ftLinks = [...allLinks].filter((link) => link.innerHTML.toLowerCase().match(/free.trial/));
       expect(ftLinks.length).to.equal(0);
     });
+  });
+});
+
+describe('analyticifseen', () => {
+  let observerCallback;
+  let observeStub;
+  let unobserveStub;
+  let originalIO;
+
+  before(() => {
+    originalIO = window.IntersectionObserver;
+    observeStub = stub();
+    unobserveStub = stub();
+    window.IntersectionObserver = function MockIO(callback) {
+      observerCallback = callback;
+      this.observe = observeStub;
+      this.unobserve = unobserveStub;
+    };
+  });
+
+  afterEach(() => {
+    observeStub.resetHistory();
+    unobserveStub.resetHistory();
+    delete window._satellite;
+  });
+
+  after(() => {
+    window.IntersectionObserver = originalIO;
+  });
+
+  it('should set up IntersectionObserver on target elements', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/personalization.html' });
+    await loadManifestAndSetResponse('./mocks/manifestAnalyticIfSeen.json');
+    await init(mepSettings);
+    expect(observeStub.called).to.be.true;
+  });
+
+  it('should fire analytics and unobserve when element is intersecting', () => {
+    window._satellite = { track: stub() };
+    observerCallback([{ isIntersecting: true }]);
+    expect(window._satellite.track.calledOnce).to.be.true;
+    const [eventName, payload] = window._satellite.track.firstCall.args;
+    expect(eventName).to.equal('event');
+    expect(payload.xdm.web.webInteraction.name).to.equal('my-marquee-tracking was seen');
+    expect(unobserveStub.calledOnce).to.be.true;
+  });
+
+  it('should not fire analytics when element is not intersecting', () => {
+    window._satellite = { track: stub() };
+    observerCallback([{ isIntersecting: false }]);
+    expect(window._satellite.track.called).to.be.false;
+  });
+
+  it('should defer analytics to alloy_sendEvent when _satellite is unavailable', () => {
+    window.dispatchEvent(new Event('alloy_sendEvent'));
+
+    observerCallback([{ isIntersecting: true }]);
+    window._satellite = { track: stub() };
+    window.dispatchEvent(new Event('alloy_sendEvent'));
+    expect(window._satellite.track.calledOnce).to.be.true;
+    const [, payload] = window._satellite.track.firstCall.args;
+    expect(payload.xdm.web.webInteraction.name).to.equal('my-marquee-tracking was seen');
+  });
+});
+
+describe('categorizeActions ordering (parallelization-safe)', () => {
+  const mkExp = (name, page, fw) => ({
+    manifestPath: `/m-${name}.json`,
+    selectedVariant: {
+      name,
+      replacepage: page ? [{ val: page }] : undefined,
+      updateframework: fw ? [fw] : undefined,
+    },
+  });
+
+  it('applies the later experiment replacepage/updateframework (last write wins)', async () => {
+    const config = getConfig();
+    config.mep = { ...(config.mep || {}) };
+    delete config.mep.replacepage;
+    delete config.mep.updateframework;
+
+    // applyPers runs categorizeActions via Promise.all(experiments.map(...)).
+    // categorizeActions has no internal awaits, so .map invokes each body
+    // synchronously in execution order and the last manifest's writes win —
+    // identical to the old sequential loop. Pin that observable contract.
+    const experiments = [mkExp('a', '/page-a', 'fw-a'), mkExp('b', '/page-b', 'fw-b')];
+    await Promise.all(experiments.map((exp) => categorizeActions(exp, config)));
+
+    expect(config.mep.replacepage).to.deep.equal({ val: '/page-b' });
+    expect(config.mep.updateframework).to.equal('fw-b');
+  });
+
+  it('returns { experiment } for a default variant without touching shared config', async () => {
+    const config = getConfig();
+    config.mep = { ...(config.mep || {}) };
+    delete config.mep.replacepage;
+    const experiment = { manifestPath: '/d.json', selectedVariant: 'default' };
+    const result = await categorizeActions(experiment, config);
+    expect(result).to.deep.equal({ experiment });
+    expect(config.mep.replacepage).to.be.undefined;
   });
 });

@@ -44,6 +44,7 @@ const setBreadcrumbSEO = (breadcrumbs) => {
 const createBreadcrumbs = (element) => {
   if (!element) return null;
   const ul = element.querySelector('ul');
+  if (!ul) return null;
   const pageTitle = getMetadata(metadata.pageTitle);
   if (pageTitle || getMetadata(metadata.showCurrent) === 'on') {
     ul.append(toFragment`
@@ -85,7 +86,13 @@ const createWithBase = async (el) => {
     element.querySelector('ul')?.prepend(...base.querySelectorAll('li'));
     return createBreadcrumbs(element);
   } catch (e) {
-    lanaLog({ e, message: 'Breadcrumbs failed fetching base', tags: 'gnav-breadcrumbs', errorType: 'i' });
+    lanaLog({
+      e,
+      message: 'Breadcrumbs failed fetching base',
+      tags: 'gnav-breadcrumbs',
+      errorType: 'i',
+      severity: 'error',
+    });
     return null;
   }
 };
@@ -114,7 +121,12 @@ export default async function init(el) {
     setBreadcrumbSEO(breadcrumbsEl);
     return breadcrumbsEl;
   } catch (e) {
-    lanaLog({ e, message: 'Breadcrumbs failed rendering', tags: 'gnav-breadcrumbs', errorType: 'e' });
+    lanaLog({
+      e,
+      message: 'Breadcrumbs failed rendering',
+      tags: 'gnav-breadcrumbs',
+      severity: 'error',
+    });
     return null;
   }
 }

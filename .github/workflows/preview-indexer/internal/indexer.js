@@ -1,0 +1,248 @@
+// node --env-file=.env .github/workflows/preview-indexer/incremental.js (node >= 21)
+import { fetchLogsForSite, getSiteEnvKey, triggerPreview, getPreviewPathsForRegion, getRedirects } from './helix-client.js';
+import { getLastRunInfo, saveLastRuns } from './indexer-state.js';
+import SiteConfig from './site-config.js';
+
+const previewJsonTemplate = {
+  total: 0,
+  limit: 0,
+  offset: 0,
+  data: [
+  ],
+  ':colWidths': [
+    1000,
+  ],
+  ':sheetname': 'data',
+  ':type': 'sheet',
+};
+
+const { env } = process;
+const {
+  LOCAL_RUN,
+  ROLLING_IMPORT_SLACK,
+  GITHUB_SERVER_URL,
+  GITHUB_RUN_ID,
+  LAST_RUN_ISO_FROM,
+  LAST_RUN_ISO_TO,
+  SITE_REGION_PATHS,
+} = env;
+
+const initIndexer = async (siteOrg, siteRepo, lingoConfigMap, datalayer) => {
+  const self = {};
+
+  // Initialize site configuration
+  const config = SiteConfig(siteOrg, siteRepo, lingoConfigMap);
+  const orgWithRepo = getSiteEnvKey(siteOrg, siteRepo);
+  const pathExtn = config.getPreviewPathExtension();
+
+  function getISOSinceXDaysAgo(days) {
+    const now = new Date();
+    now.setDate(now.getDate() - days);
+    return now.toISOString();
+  }
+
+  function getWorkflowRunUrl() {
+    if (GITHUB_SERVER_URL && GITHUB_RUN_ID) {
+      return `${GITHUB_SERVER_URL}/${siteOrg}/milo/actions/runs/${GITHUB_RUN_ID}`;
+    }
+    return null;
+  }
+
+  // TODO: Add Slack Notifications
+  const slackNotification = async (text) => {
+    console.log(text);
+    if (!LOCAL_RUN) {
+      console.log(`Slack info: ${ROLLING_IMPORT_SLACK}`);
+      const workflowUrl = getWorkflowRunUrl();
+      if (workflowUrl) {
+        // Future: Send slack notification with workflowUrl
+      }
+    }
+    return {};
+  };
+
+  async function getPreviewPaths(entries, method = 'POST') {
+    const previewPaths = Array.from(
+      new Set(
+        entries
+          .filter((entry) => entry.method === method && entry.route === 'preview')
+          .flatMap((log) => [
+            log.path,
+            ...(Array.isArray(log.paths) ? log.paths : []),
+          ]),
+      ),
+    );
+    return previewPaths;
+  }
+
+  async function getUnpreviewPaths(entries) {
+    return getPreviewPaths(entries, 'DELETE');
+  }
+
+  function getFilteredPaths(paths) {
+    const hasNoExtension = (path) => !/\.[^/]+$/.test(path);
+    const isIncluded = (path) => config.canIncludePath(path);
+    return paths.filter(
+      (path) => hasNoExtension(path) && isIncluded(path),
+    );
+  }
+
+  function getPathsPerRoot(previewRoots, filteredPreviewPaths) {
+    return previewRoots.reduce((acc, root) => {
+      const paths = filteredPreviewPaths.filter((path) => path.startsWith(root));
+      if (paths.length) {
+        const indexPath = config.getIndexPath(root);
+        acc[root] = {
+          indexPath,
+          indexPreviewPath: `${indexPath}.json`,
+          paths: paths.map((path) => path.endsWith('/') ? path : `${path}${pathExtn}`),
+        };
+      }
+      return acc;
+    }, {});
+  }
+
+  self.incremental = async (siteRegionPaths = []) => {
+    const previewRoots = config.filterPreviewRoots(siteRegionPaths);
+
+    // Validate configuration
+    const validationError = config.getValidationError();
+    if (validationError || !previewRoots.length) {
+      await slackNotification(validationError || `No preview roots to process for ${siteOrg}/${siteRepo}`);
+      return;
+    }
+    const lastRunInfo = await getLastRunInfo(orgWithRepo, datalayer.isSp);
+    const fromParam = LAST_RUN_ISO_FROM || lastRunInfo?.lastRunISO || getISOSinceXDaysAgo(1);
+    console.log(`Last run used: ${fromParam}. Last run from cache: ${lastRunInfo?.lastRunISO}`);
+    const toParam = LAST_RUN_ISO_TO || new Date().toISOString();
+    const logsResult = await fetchLogsForSite(
+      siteOrg,
+      siteRepo,
+      fromParam,
+      toParam,
+    );
+    const lastRunISO = logsResult?.lastFetchedISO || toParam;
+    const entries = logsResult?.entries || [];
+    if (!entries?.length) {
+      console.log(`No entries found, exiting for ${siteOrg}/${siteRepo} at ${toParam}.`);
+      return;
+    }
+
+    const redirectPaths = [];
+    const redirectFolders = [];
+    for (const redirectEntry of await getRedirects(siteOrg, siteRepo)) {
+      if (redirectEntry.endsWith('*')) {
+        redirectFolders.push(redirectEntry.slice(0, -1));
+      } else {
+        redirectPaths.push(`${redirectEntry}${pathExtn}`);
+      }
+    }
+
+    const unpreviewPaths = await getUnpreviewPaths(entries);
+    const filteredUnpreviewPaths = getFilteredPaths(unpreviewPaths);
+
+    const previewPaths = await getPreviewPaths(entries);
+    const filteredPreviewPaths = getFilteredPaths(previewPaths).filter((path) => !filteredUnpreviewPaths.includes(path));
+    const unpreviewPathsPerRoot = getPathsPerRoot(previewRoots, filteredUnpreviewPaths);
+    const previewPathsPerRoot = getPathsPerRoot(previewRoots, filteredPreviewPaths);
+
+    for (const rootPath of previewRoots) {
+      const previewRoot = previewPathsPerRoot[rootPath];
+      const unpreviewRoot = unpreviewPathsPerRoot[rootPath];
+      if (!previewRoot?.paths?.length && !unpreviewRoot?.paths?.length) {
+        continue;
+      }
+      console.log(`Processing root: ${rootPath}`);
+      const previewIndexPath = previewRoot?.indexPath || unpreviewRoot?.indexPath;
+      const previewIndexPreviewPath = previewRoot?.indexPreviewPath || unpreviewRoot?.indexPreviewPath;
+      const currentData = await datalayer.getPreviewIndexJson(siteOrg, siteRepo, previewIndexPath);
+      let previewIndex = { ...previewJsonTemplate };
+      if (currentData?.data?.length) {
+        const filteredCurrentData = currentData.data.filter((item) => !unpreviewPathsPerRoot[rootPath]?.paths?.includes(item.Path));
+        const mergedSet = new Set(filteredCurrentData.map((item) => item.Path));
+        previewRoot?.paths?.forEach((path) => {
+          mergedSet.add(path);
+        });
+        const mergedData = [...mergedSet].map((path) => ({ Path: path }));
+        previewIndex = { ...previewIndex, data: mergedData };
+      } else if (previewRoot?.paths) {
+        const pathData = previewRoot.paths.map((path) => ({ Path: path }));
+        previewIndex = { ...previewIndex, data: pathData };
+      }
+      // Remove the redirect paths from the preview index
+      previewIndex.data = previewIndex.data
+        .filter((item) => !redirectPaths.find((path) => path.startsWith(rootPath) && item.Path.startsWith(path)))
+        .filter((item) => !redirectFolders.find((fldr) => item.Path.startsWith(fldr)));
+      const { length } = previewIndex.data;
+      previewIndex = { ...previewIndex, total: length, limit: length };
+      const result = await datalayer.savePreviewIndexJson(siteOrg, siteRepo, `${previewIndexPath}${config.getPreviewFileExtension()}`, previewIndex);
+      console.log(`Preview index saved at ${result.href} with ${result.status}`);
+      const previewResult = await triggerPreview(siteOrg, siteRepo, previewIndexPreviewPath);
+      console.log(`Preview result: ${previewResult?.preview?.url}`);
+    }
+
+    // Save the checkpoint for the next run only if its not a manual trigger.
+    if (!LAST_RUN_ISO_TO) {
+      await saveLastRuns(orgWithRepo, { lastRunISO }, datalayer.isSp);
+    }
+
+    await slackNotification(
+      `Successful: Incremental index for ${siteOrg}/${siteRepo}.`,
+    );
+  };
+
+  self.full = async (regionPaths) => {
+    const previewRoots = config.filterPreviewRoots(regionPaths);
+    const validationError = config.getValidationError();
+    if (validationError || !previewRoots.length) {
+      await slackNotification(validationError || `No preview roots to process for ${siteOrg}/${siteRepo}`);
+      return;
+    }
+
+    for (const [regionIndex, root] of previewRoots.entries()) {
+      const msg = `Processing region ${regionIndex + 1} of ${previewRoots.length}`;
+      console.log(`${msg} for ${siteOrg}/${siteRepo} with root ${root}`);
+
+      const indexPath = config.getIndexPath(root);
+      const indexPreviewPath = `${indexPath}.json`;
+      const previewPaths = await getPreviewPathsForRegion(siteOrg, siteRepo, root);
+
+      const hasNoExtension = (path) => !/\.[^/]+$/.test(path);
+      const isIncluded = (path) => config.canIncludePath(path);
+      const pathExtn = config.getPreviewPathExtension();
+      const filteredPreviewPaths = (previewPaths?.filter(
+        (path) => hasNoExtension(path) && isIncluded(path),
+      ) || []).map((path) => `${path.endsWith('/') ? path : path + pathExtn}`);
+
+      const defaultPreviewsPathsJson = await datalayer.getPreviewIndexJson(siteOrg, siteRepo, `${indexPath}-default`);
+      const defaultPreviewPaths = defaultPreviewsPathsJson?.data?.map?.((item) => item.Path) || [];
+      const mergedPreviewPaths = [...defaultPreviewPaths, ...filteredPreviewPaths];
+      if (mergedPreviewPaths?.length) {
+        let previewIndex = { ...previewJsonTemplate };
+        const pathData = mergedPreviewPaths.map((path) => ({ Path: path }));
+        const total = mergedPreviewPaths.length;
+        previewIndex = { ...previewIndex, total, limit: total, data: pathData };
+        const result = await datalayer.savePreviewIndexJson(siteOrg, siteRepo, `${indexPath}${config.getPreviewFileExtension()}`, previewIndex);
+        console.log(`Preview index saved at ${result.href} with ${result.status}`);
+        const previewResult = await triggerPreview(siteOrg, siteRepo, indexPreviewPath);
+        console.log(`Preview result: ${previewResult?.preview?.url}`);
+      }
+    }
+  };
+
+  self.normalizeRegionPaths = (csRegionPaths) => {
+    const regionPaths = csRegionPaths ? csRegionPaths.split(',') : [];
+    return regionPaths.map((path) => {
+      const trimmed = path.trim();
+      if (!trimmed) return '';
+      let normalized = trimmed;
+      if (!normalized.startsWith('/')) normalized = '/' + normalized;
+      if (!normalized.endsWith('/')) normalized = normalized + '/';
+      return normalized;
+    }).filter(Boolean);
+  }
+  return self;
+};
+
+export default initIndexer;
+export { initIndexer };

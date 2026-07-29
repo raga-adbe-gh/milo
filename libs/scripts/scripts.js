@@ -26,19 +26,19 @@ const stageDomainsMap = {
     'www.adobe.com': 'origin',
     'helpx.adobe.com': 'helpx.stage.adobe.com',
   },
-  '--bacom--adobecom.hlx.live': {
+  '--bacom--adobecom.aem.live': {
     'business.adobe.com': 'origin',
-    'news.adobe.com': 'main--news--adobecom.hlx.live',
+    'news.adobe.com': 'main--news--adobecom.aem.live',
   },
-  '--blog--adobecom.hlx.page': {
+  '--blog--adobecom.aem.page': {
     'blog.adobe.com': 'origin',
-    'business.adobe.com': 'main--bacom--adobecom.hlx.page',
+    'business.adobe.com': 'main--bacom--adobecom.aem.page',
   },
   '.business-graybox.adobe.com': { 'business.adobe.com': 'origin' },
   '^https://.*--milo--.*.(hlx|aem).page': {
-    '^https://www.adobe.com/acrobat': 'https://main--dc--adobecom.hlx.page',
+    '^https://www.adobe.com/acrobat': 'https://main--dc--adobecom.aem.page',
     '^https://business.adobe.com(?!/blog)': 'https://business.stage.adobe.com',
-    '^https://business.adobe.com/blog': 'https://main--bacom-blog--adobecom.hlx.page',
+    '^https://business.adobe.com/blog': 'https://main--bacom-blog--adobecom.aem.page',
     '^https://www.adobe.com': 'origin',
   },
 };
@@ -48,25 +48,9 @@ const config = {
   fallbackRouting: 'on',
   links: 'on',
   imsClientId: 'milo',
+  uniqueSiteId: 'milo',
   codeRoot: '/libs',
   locales,
-  languages: {
-    en: {
-      tk: 'hah7vzn.css',
-      regions: [
-        { region: 'us' },
-        { region: 'gb' },
-        { region: 'apac', ietf: 'en' },
-      ],
-    },
-    de: {
-      tk: 'hah7vzn.css',
-      regions: [
-        { region: 'ch' },
-        { region: 'de' },
-      ],
-    },
-  },
   prodDomains,
   stageDomainsMap,
   jarvis: {
@@ -79,6 +63,8 @@ const config = {
   brandConciergeAA: 'app-reco',
   // taxonomyRoot: '/your-path-here',
 };
+
+const miloLibs = '/libs';
 
 const eagerLoad = (img) => {
   img?.setAttribute('loading', 'eager');
@@ -94,7 +80,23 @@ const eagerLoad = (img) => {
   }
 }());
 
+function loadStyles() {
+  const paths = [];
+  const stylesPrefix = getMetadata('foundation') === 'c2' ? '/c2' : '';
+  paths.push(`${miloLibs}${stylesPrefix}/styles/styles.css`);
+  const skin = getMetadata('skin');
+  if (skin) paths.push(`${miloLibs}/styles/skins/${skin}.css`);
+
+  paths.forEach((path) => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', path);
+    document.head.appendChild(link);
+  });
+}
+
 (async function loadPage() {
+  loadStyles();
   if (getMetadata('template') === '404') window.SAMPLE_PAGEVIEWS_AT_RATE = 'high';
   performance.mark('loadpage');
   setConfig(config);

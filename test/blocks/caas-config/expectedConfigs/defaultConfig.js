@@ -10,7 +10,7 @@ const defaultConfig = {
     collectionButtonStyle: 'primary',
     resultsPerPage: 5,
     endpoint:
-      'https://www.adobe.com/chimera-api/collection?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=en&country=us&complexQuery=&excludeIds=&currentEntityId=&featuredCards=&environment=&draft=false&size=10',
+      'https://www.adobe.com/chimera-api/collection?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=en&country=us&complexQuery=&excludeIds=26e0051d-8836-5822-aba0-d26631ce43a4&currentEntityId=&featuredCards=&environment=&draft=false&size=10',
     fallbackEndpoint: '',
     hideDateInterval: false,
     totalCardsToShow: 10,
@@ -30,11 +30,13 @@ const defaultConfig = {
       titleHeadingLevel: 'h3',
       nextCards: 'Next Cards',
       prevCards: 'Previous Cards',
+      sortBy: 'Sort by',
     },
     detailsTextOption: 'default',
     setCardBorders: false,
     showCardBadges: false,
     showFooterDivider: false,
+    useCenterVideoPlay: false,
     useOverlayLinks: false,
     banner: {
       register: { description: 'Sign Up', url: '#registration' },
@@ -128,6 +130,7 @@ const defaultConfig = {
     showEmptyFilters: false,
     filters: [],
     filterLogic: 'or',
+    categoryMappings: {},
     i18n: {
       leftPanel: {
         header: 'Refine Your Results',
@@ -213,6 +216,7 @@ const defaultConfig = {
   },
   linkTransformer: {},
   customCard: ['card', 'return ``'],
+  products: {},
 };
 
 export default defaultConfig;

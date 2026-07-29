@@ -1,9 +1,10 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable import/no-cycle */
-import { createTag, getMetadata, localizeLink, loadStyle, getConfig } from '../../utils/utils.js';
+import { createTag, getMetadata, localizeLinkAsync, loadStyle, getConfig } from '../../utils/utils.js';
 import { decorateSectionAnalytics } from '../../martech/attributes.js';
 
-const FOCUSABLES = 'a:not(.hide-video), button:not([disabled], .locale-modal-v2 .paddle), input, textarea, select, details, [tabindex]:not([tabindex="-1"])';
+const LOCALE_MODAL_ID = 'locale-modal-v2';
+const FOCUSABLES = 'a:not(.hide-video, .faas), button:not([disabled], .locale-modal-v2 .paddle), input, textarea, select, details, [tabindex]:not([tabindex="-1"])';
 const CLOSE_ICON = `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
   <g transform="translate(-10500 3403)">
     <circle cx="10" cy="10" r="10" transform="translate(10500 -3403)"/>
@@ -12,15 +13,15 @@ const CLOSE_ICON = `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" w
   </g>
 </svg>`;
 
-let isDelayedModal = false;
+let delayedModalId = null;
 let prevHash = '';
 let isDeepLink = false;
 const dialogLoadingSet = new Set();
 
-export function findDetails(hash, el) {
+export async function findDetails(hash, el) {
   const id = hash.replace('#', '');
   const a = el || document.querySelector(`a[data-modal-hash="${hash}"]`);
-  const path = a?.dataset.modalPath || localizeLink(getMetadata(`-${id}`));
+  const path = a?.dataset.modalPath || await localizeLinkAsync(getMetadata(`-${id}`));
   const ariaLabel = a?.getAttribute('aria-label') || document.querySelector(`a[data-modal-id="${id}"]`)?.getAttribute('aria-label');
   return {
     id,
@@ -49,7 +50,46 @@ export function sendAnalytics(event) {
   }
 }
 
-export function closeModal(modal) {
+function focusAfterModalClose(modal) {
+  const isGeoPopup = modal?.id === LOCALE_MODAL_ID;
+  const onetrustBanner = (isDeepLink || isGeoPopup) && document.querySelector('#onetrust-banner-sdk');
+  const geoPopupFocus = !isGeoPopup && document.querySelector(`.dialog-modal#${LOCALE_MODAL_ID} a.con-button`);
+  const toFocus = geoPopupFocus || onetrustBanner || null;
+  toFocus?.focus();
+  isDeepLink = false;
+
+  return toFocus;
+}
+
+function focusTriggerElement(modalId, shouldFocus) {
+  const triggerElement = document.querySelector(
+    `[data-modal-hash="#${modalId}"][data-is-modal-trigger="true"]`,
+  );
+
+  if (triggerElement) {
+    if (shouldFocus) triggerElement.focus();
+    triggerElement.removeAttribute('data-is-modal-trigger');
+    return;
+  }
+
+  // Fallback focus options for deep links
+  if (!isDeepLink || !shouldFocus) return;
+  const fallbackSelectors = [
+    `[data-modal-hash="#${modalId}"]`,
+    `a[data-modal-id="${modalId}"].con-button`,
+  ];
+
+  for (const selector of fallbackSelectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      element.focus();
+      break;
+    }
+  }
+}
+
+export async function closeModal(modal, shouldFocusTriggerEl = true) {
+  if (typeof modal.closeCallback === 'function') await modal.closeCallback(modal);
   const { id } = modal;
   const closeEvent = new Event('milo:modal:closed');
   window.dispatchEvent(closeEvent);
@@ -72,17 +112,20 @@ export function closeModal(modal) {
 
   document.querySelectorAll(`#${id}`).forEach((mod) => {
     if (mod.classList.contains('dialog-modal')) {
-      const modalCurtain = document.querySelector(`#${id}~.modal-curtain`);
+      const modalCurtain = !mod.matches('.dialog-modal.curtain-off') && document.querySelector(`#${id}~.modal-curtain`);
       if (modalCurtain) {
         modalCurtain.remove();
       }
       mod.remove();
     }
-    document.querySelector(`[data-modal-hash="#${mod.id}"]`)?.focus();
+    focusTriggerElement(mod.id, shouldFocusTriggerEl);
   });
 
   if (!document.querySelectorAll('.modal-curtain').length) {
     document.body.classList.remove('disable-scroll');
+    /** Restore lenis behaviour on modal close */
+    /* TODO: merch needs to load C2 modals */
+    window.lenis?.start();
   }
 
   [...document.querySelectorAll('header, main, footer')]
@@ -94,18 +137,14 @@ export function closeModal(modal) {
   }
   if (prevHash) prevHash = '';
 
-  if (isDeepLink) {
-    document.querySelector('#onetrust-banner-sdk')?.focus();
-    isDeepLink = false;
-    return;
-  }
+  if (focusAfterModalClose(modal)) return;
 
   if (document.querySelector('.notification-curtain')) {
     window.dispatchEvent(new Event('milo:modal:closed:notification'));
     return;
   }
 
-  document.querySelector(`a[data-modal-id="${id}"].con-button`)?.focus();
+  focusTriggerElement(id, shouldFocusTriggerEl);
 }
 
 function isElementInView(element) {
@@ -125,6 +164,7 @@ function getCustomModal(custom, dialog) {
   if (custom.title) dialog.setAttribute('aria-label', custom.title);
   if (custom.class) dialog.classList.add(custom.class);
   if (custom.closeEvent) dialog.addEventListener(custom.closeEvent, () => closeModal(dialog));
+  if (custom.closeCallback) dialog.closeCallback = custom.closeCallback;
   dialog.append(custom.content);
 }
 
@@ -158,16 +198,25 @@ function addIframeKeydownListener(iframe, dialog) {
 export async function getModal(details, custom) {
   if (!((details?.path && details?.id) || custom)) return null;
   const { id, deepLink } = details || custom;
-  isDeepLink = deepLink;
+  if (id !== LOCALE_MODAL_ID) isDeepLink = deepLink;
+  const activeElementData = document.activeElement.dataset;
+  if (!isDeepLink
+    && (activeElementData.modalHash === `#${id}`
+    || activeElementData.modalId === id)
+  ) {
+    document.activeElement.dataset.isModalTrigger = 'true';
+  }
 
   dialogLoadingSet.add(id);
   const dialog = createTag('div', { class: 'dialog-modal', id, role: 'dialog', 'aria-modal': true });
   const loadedEvent = new Event('milo:modal:loaded');
 
-  if (custom && !custom?.title) custom.title = findDetails(window.location.hash, null)?.title;
+  if (custom && !custom?.title) {
+    custom.title = (await findDetails(window.location.hash, null))?.title;
+  }
   if (custom) getCustomModal(custom, dialog);
   if (details) await getPathModal(details.path, dialog);
-  if (isDelayedModal) {
+  if (delayedModalId === id) {
     dialog.classList.add('delayed-modal');
     const mediaBlock = dialog.querySelector('div.media');
     if (mediaBlock) {
@@ -176,6 +225,7 @@ export async function getModal(details, custom) {
       const base = miloLibs || codeRoot;
       loadStyle(`${base}/styles/rounded-corners.css`);
     }
+    delayedModalId = null;
   }
 
   const localeModal = id?.includes('locale-modal') ? 'localeModal' : 'milo';
@@ -189,14 +239,10 @@ export async function getModal(details, custom) {
 
   const focusVisible = { focusVisible: true };
   const focusablesOnLoad = [...dialog.querySelectorAll(FOCUSABLES)];
-  const titleOnLoad = dialog.querySelector('h1, h2, h3, h4, h5');
   let firstFocusable;
 
   if (focusablesOnLoad.length && isElementInView(focusablesOnLoad[0])) {
     firstFocusable = focusablesOnLoad[0]; // eslint-disable-line prefer-destructuring
-  } else if (titleOnLoad) {
-    titleOnLoad.setAttribute('tabIndex', 0);
-    firstFocusable = titleOnLoad;
   } else {
     firstFocusable = close;
   }
@@ -219,7 +265,12 @@ export async function getModal(details, custom) {
     e.preventDefault();
   });
 
-  const documentKeydownListener = (event) => (event.key === 'Escape') && closeModal(dialog);
+  const documentKeydownListener = (event) => {
+    if (event.key === 'Escape') {
+      close.setAttribute('daa-ll', `${analyticsEventName}:modalClose:escapeClose`);
+      close.click();
+    }
+  };
   document.addEventListener('keydown', documentKeydownListener);
   dialog._documentKeydownListener = documentKeydownListener;
 
@@ -233,6 +284,9 @@ export async function getModal(details, custom) {
 
   if (!dialog.classList.contains('curtain-off')) {
     document.body.classList.add('disable-scroll');
+    /** Stop lenis behaviour on modal open */
+    /* TODO: merch needs to load C2 modals */
+    window.lenis?.stop();
     const curtain = createTag('div', {
       class: 'modal-curtain is-open',
       'daa-ll': `${analyticsEventName}:modalClose:curtainClose`,
@@ -315,7 +369,7 @@ export function delayedModal(el) {
   const { hash, delay } = getHashParams(el?.dataset.modalHash);
   const isDesktop = window.matchMedia('(min-width: 1200px)').matches;
   if (delay === undefined || !hash || !isDesktop) return false;
-  isDelayedModal = true;
+  delayedModalId = hash.replace('#', '');
   const modalOpenEvent = new Event(`${hash}:modalOpen`);
   const pagesModalWasShownOn = window.sessionStorage.getItem(`shown:${hash}`);
   el.dataset.modalHash = hash;
@@ -331,34 +385,58 @@ export function delayedModal(el) {
 }
 
 // Deep link-based
-export default function init(el) {
+export default async function init(el) {
   const { modalHash, modalPath } = el.dataset;
   if (getConfig().mep?.fragments?.[modalPath]?.action === 'remove') return null;
-  if (delayedModal(el) || window.location.hash !== modalHash || document.querySelector(`div.dialog-modal${modalHash}`)) return null;
-  if (dialogLoadingSet.has(modalHash?.replace('#', ''))) return null; // prevent duplicate modal loading
-  const details = findDetails(window.location.hash, el);
+  const normalizedHash = modalHash?.replace(/#_button-[a-zA-Z-]+/g, '');
+  if (delayedModal(el) || window.location.hash !== normalizedHash || document.querySelector(`div.dialog-modal${normalizedHash}`)) return null;
+  if (dialogLoadingSet.has(normalizedHash?.replace('#', ''))) return null; // prevent duplicate modal loading
+  const details = await findDetails(window.location.hash, el);
   details.deepLink = true;
   return details ? getModal(details) : null;
 }
 
+function safeQuerySelector(selector) {
+  try {
+    return document.querySelector(selector);
+  } catch (e) {
+    return null;
+  }
+}
+
 // Click-based modal
-window.addEventListener('hashchange', (e) => {
+window.addEventListener('hashchange', async (e) => {
   if (!window.location.hash) {
     try {
       const url = new URL(e.oldURL);
-      const dialog = document.querySelector(`.dialog-modal${url.hash}`);
+      const dialog = safeQuerySelector(`.dialog-modal${url.hash}`);
       if (dialog) closeModal(dialog);
     } catch (error) {
       /* do nothing */
     }
   } else {
-    const details = findDetails(window.location.hash, null);
+    const details = await findDetails(window.location.hash, null);
+    const oldUrl = new URL(e.oldURL);
+    const { hash } = oldUrl;
+    const isFromIms = hash.includes(`old_hash=${details.id}`) && hash.includes('from_ims=true');
+
+    const { path: oldDialogPath } = await findDetails(oldUrl.hash, null);
+    const oldDialog = !isFromIms && oldDialogPath ? safeQuerySelector(`.dialog-modal${oldUrl.hash}`) : null;
+    if (oldDialog) {
+      const potentialScrollTarget = !!safeQuerySelector(window.location.hash);
+      const persistPrevHash = prevHash;
+      closeModal(oldDialog, !potentialScrollTarget);
+      prevHash = potentialScrollTarget ? '' : persistPrevHash;
+    }
+
+    if (isDeepLink) return;
     if (details) getModal(details);
-    if (e.oldURL?.includes('#')) {
-      const { hash } = new URL(e.oldURL);
-      if (hash.includes('=') || !document.querySelector(`${hash}:not(.dialog-modal)`)) {
-        prevHash = hash;
-      }
+    isDeepLink = details?.path && details?.id && isFromIms;
+    if (!hash || isFromIms || oldDialog) return;
+
+    const hashElement = safeQuerySelector(`${hash}:not(.dialog-modal)`);
+    if (hash.includes('=') || !hashElement) {
+      prevHash = hash;
     }
   }
 });

@@ -21,7 +21,7 @@ async function loadFragments(el, experiences) {
 
 function redirectPage(quizUrl, debug, message) {
   const url = quizUrl ? getLocalizedURL(quizUrl.text) : 'https://adobe.com';
-  window.lana.log(message, { tags: 'quiz-results' });
+  window.lana.log(message, { tags: 'quiz-results', severity: 'error' });
 
   if (debug === 'quiz-results') {
     // eslint-disable-next-line no-console
@@ -68,10 +68,6 @@ export default async function init(el, debug = null, localStoreKey = null) {
   el.replaceChildren();
 
   let results = localStorage.getItem(localStoreKey);
-  if (!results) {
-    redirectPage(quizUrl, debug, `${LOADING_ERROR} local storage missing`);
-    return;
-  }
 
   try {
     results = JSON.parse(results);
@@ -81,24 +77,28 @@ export default async function init(el, debug = null, localStoreKey = null) {
   }
 
   if (data.nestedfragments && el.classList.contains('nested')) {
-    const nested = results[NESTED_KEY][data.nestedfragments.text];
-    if (nested) loadFragments(el, nested);
+    if (results) {
+      const nested = results[NESTED_KEY][data.nestedfragments.text];
+      if (nested) loadFragments(el, nested);
+    }
   } else if (el.classList.contains('basic')) {
-    const basic = results[BASIC_KEY];
-    const pageloadHash = results[HASH_KEY];
+    let basic = null;
+    if (results) {
+      basic = results[BASIC_KEY];
+      const pageloadHash = results[HASH_KEY];
 
+      if (pageloadHash) {
+        setAnalytics(pageloadHash, debug);
+      }
+
+      loadFragments(el, basic);
+    }
     if (!basic || basic.length === 0) {
       redirectPage(quizUrl, debug, `${LOADING_ERROR} Basic fragments are missing`);
       return;
     }
-
-    if (pageloadHash) {
-      setAnalytics(pageloadHash, debug);
-    }
-
-    loadFragments(el, basic);
   } else {
-    window.lana.log(`${LOADING_ERROR} The quiz-results block is misconfigured`, { tags: 'quiz-results' });
+    window.lana.log(`${LOADING_ERROR} The quiz-results block is misconfigured`, { tags: 'quiz-results', severity: 'error' });
     return;
   }
 

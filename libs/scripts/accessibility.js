@@ -1,3 +1,8 @@
+import { getMetadata } from '../utils/utils.js';
+
+let c2DefferTimeout = null;
+const isC2 = getMetadata('foundation') === 'c2';
+
 function getActiveEl(target) {
   let active = target.shadowRoot?.activeElement ?? target;
   while (active.shadowRoot?.activeElement) {
@@ -25,7 +30,7 @@ function removeScrollPadding() {
 
 function getElementFromPoint(x, y) {
   let elFromPoint = document.elementFromPoint(x, y);
-  while (elFromPoint.shadowRoot) {
+  while (elFromPoint?.shadowRoot) {
     const el = elFromPoint.shadowRoot.elementFromPoint(x, y);
     if (el === elFromPoint) break;
     elFromPoint = el;
@@ -64,6 +69,15 @@ function scrollTabFocusedElIntoView() {
 
     if (shouldntScroll(element, elFromPointTop)
       && shouldntScroll(element, elFromPointBottom)) return;
+    // TODO: There may also be a need to add support for the bottom section,
+    // e.g. parallax-move-down-fast
+    const hasPrallaxMvUp = element.closest('.parallax-move-up-fast.section');
+    if (hasPrallaxMvUp) {
+      const nextSection = hasPrallaxMvUp.nextElementSibling;
+      if (!nextSection) return;
+      const scrollPosition = Math.max(nextSection.offsetTop - window.innerHeight - 1, 0);
+      window.scrollTo({ top: scrollPosition });
+    }
 
     element.scrollIntoView({ behavior: 'instant', block: 'center' });
   }
@@ -87,7 +101,17 @@ function scrollTabFocusedElIntoView() {
 
   document.addEventListener('focusin', (e) => {
     if (!isTab && !e.target.closest('footer')) return;
-    scrollElement(e.target);
+    const { target } = e;
+    if (!isC2) {
+      scrollElement(target);
+      return;
+    }
+
+    clearTimeout(c2DefferTimeout);
+    c2DefferTimeout = setTimeout(() => {
+      if (document.activeElement !== target) return;
+      scrollElement(target);
+    });
   });
 }
 

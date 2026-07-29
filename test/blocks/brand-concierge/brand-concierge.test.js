@@ -1,22 +1,12 @@
 import { readFile } from '@web/test-runner-commands';
 import { expect } from '@esm-bundle/chai';
+import sinon from 'sinon';
 import { waitForElement } from '../../helpers/waitfor.js';
 import { setConfig } from '../../../libs/utils/utils.js';
 
 setConfig({ codeRoot: '/libs', brandConciergeAA: 'testAA' });
 
-const { default: init } = await import('../../../libs/blocks/brand-concierge/brand-concierge.js');
-
-// Prevent external script injection during tests
-const externalScriptSrc = 'https://cdn.experience-stage.adobe.net/solutions/experience-platform-brand-concierge-web-agent/static-assets/main.js';
-const originalHeadAppendChild = document.head.appendChild.bind(document.head);
-document.head.appendChild = (node) => {
-  if (node && node.tagName === 'SCRIPT' && node.src === externalScriptSrc) {
-    // Swallow external script
-    return node;
-  }
-  return originalHeadAppendChild(node);
-};
+const { default: init, updateReplicatedValue, getUpdatedChatUIConfig, createSusiComponentForModal } = await import('../../../libs/blocks/brand-concierge/brand-concierge.js');
 
 describe('Brand Concierge', () => {
   it('decorates default variant with header, cards, input and legal, and sets background', async () => {
@@ -46,7 +36,7 @@ describe('Brand Concierge', () => {
     // input field
     const inputField = block.querySelector('.bc-input-field');
     expect(inputField).to.exist;
-    const input = inputField.querySelector('input#bc-input-field');
+    const input = inputField.querySelector('#bc-input-field');
     expect(input).to.exist;
     expect(input.getAttribute('placeholder')).to.equal("Tell us what you'd like to do or create");
     const tooltip = inputField.querySelector('#bc-label-tooltip');
@@ -60,9 +50,9 @@ describe('Brand Concierge', () => {
     expect(legal.textContent).to.contain('Terms');
   });
 
-  it('renders input before cards when field-first is set', async () => {
-    document.body.innerHTML = await readFile({ path: './mocks/field-first.html' });
-    const block = document.querySelector('.brand-concierge.field-first');
+  it('renders input before cards when input-first is set', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/input-first.html' });
+    const block = document.querySelector('.brand-concierge.input-first');
     await init(block);
 
     const children = [...block.children];
@@ -75,9 +65,10 @@ describe('Brand Concierge', () => {
   it('enables send button on input and opens modal on Enter', async () => {
     document.body.innerHTML = await readFile({ path: './mocks/default.html' });
     const block = document.querySelector('.brand-concierge');
+
     await init(block);
 
-    const input = block.querySelector('.bc-input-field input');
+    const input = block.querySelector('#bc-input-field');
     const button = block.querySelector('button.input-field-button');
     expect(button.disabled).to.equal(true);
 
@@ -86,7 +77,7 @@ describe('Brand Concierge', () => {
     expect(button.disabled).to.equal(false);
 
     // trigger submit via Enter
-    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     const modal = await waitForElement('#brand-concierge-modal');
     expect(modal).to.exist;
@@ -100,7 +91,7 @@ describe('Brand Concierge', () => {
     expect(curtain.getAttribute('daa-ll')).to.equal('Filters|testAA|bc#modal-close');
 
     // input cleared after opening
-    expect(block.querySelector('.bc-input-field input').value).to.equal('');
+    expect(block.querySelector('#bc-input-field').value).to.equal('');
   });
 
   it('clicking a prompt card fills input and opens modal with card text', async () => {
@@ -115,5 +106,334 @@ describe('Brand Concierge', () => {
     const mount = modal.querySelector('#brand-concierge-mount');
     expect(mount).to.exist;
     expect(mount.dataset.initialMessage).to.contain('Prompt two');
+  });
+
+  describe('Privacy Consent Handling', () => {
+    let block;
+    let originalAdobePrivacy;
+    let originalLana;
+
+    beforeEach(async () => {
+      document.body.innerHTML = await readFile({ path: './mocks/default.html' });
+      block = document.querySelector('.brand-concierge');
+      originalAdobePrivacy = window.adobePrivacy;
+      originalLana = window.lana;
+    });
+
+    afterEach(() => {
+      window.adobePrivacy = originalAdobePrivacy;
+      window.lana = originalLana;
+      sinon.restore();
+    });
+
+    it('shows the block if privacy hasnt loaded yet', async () => {
+      window.adobePrivacy = undefined;
+      await init(block);
+      expect(block.classList.contains('hide-block')).to.be.false;
+    });
+
+    it('hides the block if the user rejects all cookies', async () => {
+      window.adobePrivacy = undefined;
+      await init(block);
+      expect(block.classList.contains('hide-block')).to.be.false;
+      window.adobePrivacy = { activeCookieGroups: sinon.stub().returns(['C0001']) };
+      window.dispatchEvent(new CustomEvent('adobePrivacy:PrivacyReject'));
+      expect(block.classList.contains('hide-block')).to.be.true;
+    });
+
+    it('hides the block if the user rejects performance cookies', async () => {
+      window.adobePrivacy = undefined;
+      await init(block);
+      expect(block.classList.contains('hide-block')).to.be.false;
+      window.adobePrivacy = { activeCookieGroups: sinon.stub().returns(['C0001', 'C0003']) };
+      window.dispatchEvent(new CustomEvent('adobePrivacy:PrivacyReject'));
+      expect(block.classList.contains('hide-block')).to.be.true;
+    });
+  });
+
+  describe('updateReplicatedValue', () => {
+    let textareaWrapper;
+    let textarea;
+
+    beforeEach(() => {
+      textareaWrapper = document.createElement('div');
+      textarea = document.createElement('textarea');
+    });
+
+    it('sets replicatedValue to textarea placeholder when value is empty', () => {
+      textarea.value = '';
+      textarea.placeholder = 'Enter your message here';
+      updateReplicatedValue(textareaWrapper, textarea);
+      expect(textareaWrapper.dataset.replicatedValue).to.equal('Enter your message here');
+    });
+
+    it('prioritizes value over placeholder when both exist', () => {
+      textarea.value = 'Actual input';
+      textarea.placeholder = 'Placeholder text';
+      updateReplicatedValue(textareaWrapper, textarea);
+      expect(textareaWrapper.dataset.replicatedValue).to.equal('Actual input');
+    });
+  });
+
+  it('getUpdatedChatUIConfig returns config with authored content', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/default.html' });
+    const block = document.querySelector('.brand-concierge');
+    await init(block);
+
+    const config = getUpdatedChatUIConfig();
+    expect(config).to.exist;
+    expect(config.text['welcome.heading']).to.equal('AI Assistant');
+    expect(config.text['welcome.subheading']).to.equal('How can we help?');
+    expect(config.text['input.placeholder']).to.equal("Tell us what you'd like to do or create");
+    expect(config.arrays['welcome.examples']).to.be.an('array');
+    expect(config.arrays['welcome.examples'].length).to.equal(2);
+    expect(config.arrays['welcome.examples'][0].text).to.equal('Prompt one');
+    expect(config.arrays['welcome.examples'][1].text).to.equal('Prompt two');
+  });
+
+  it('removes query parameters from background image URL', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/background-image.html' });
+    const block = document.querySelector('.brand-concierge');
+    await init(block);
+
+    expect(block.classList.contains('has-bg-image')).to.be.true;
+    const bgValue = block.style.getPropertyValue('--brand-concierge-bg');
+    expect(bgValue).to.contain('url(');
+    expect(bgValue).to.contain('https://example.com/image.jpg');
+    expect(bgValue).to.not.contain('?width=200');
+    expect(bgValue).to.not.contain('&height=300');
+  });
+
+  it('decorates floating button with correct structure and opens modal on click', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/floating-button.html' });
+    const block = document.querySelector('.brand-concierge.floating-button');
+    await init(block);
+
+    const floatingButton = block.querySelector('.bc-floating-button');
+    expect(floatingButton).to.exist;
+    expect(floatingButton.querySelector('.bc-floating-icon')).to.exist;
+    expect(floatingButton.querySelector('.bc-floating-input')).to.exist;
+    expect(floatingButton.querySelector('.bc-floating-input').textContent.trim()).to.equal('Tell us what you\'d like to do or create');
+    expect(floatingButton.querySelector('.bc-floating-submit')).to.exist;
+
+    floatingButton.click();
+
+    const modal = await waitForElement('#brand-concierge-modal');
+    expect(modal).to.exist;
+    const mount = modal.querySelector('#brand-concierge-mount');
+    expect(mount).to.exist;
+    expect(mount.dataset.initialMessage).to.be.undefined;
+  });
+
+  it('sets up bootstrap API parameters, onBeforeEventSend callback, and event handlers correctly', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/default.html' });
+    const block = document.querySelector('.brand-concierge');
+
+    // Mock window.adobe.concierge.bootstrap to be available immediately
+    const bootstrapSpy = sinon.spy();
+    window.adobe = { concierge: { bootstrap: bootstrapSpy } };
+
+    await init(block);
+
+    const input = block.querySelector('#bc-input-field');
+    input.value = 'Test message';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    const modal = await waitForElement('#brand-concierge-modal');
+    expect(modal).to.exist;
+
+    // Wait for bootstrap to be called (waitForCondition checks for API availability)
+    await new Promise((resolve) => {
+      const checkBootstrap = () => {
+        if (bootstrapSpy.called) {
+          resolve();
+        } else {
+          setTimeout(checkBootstrap, 50);
+        }
+      };
+      setTimeout(() => resolve(), 2000);
+      checkBootstrap();
+    });
+
+    const bootstrapArgs = bootstrapSpy.firstCall.args[0];
+    expect(bootstrapArgs.instanceName).to.equal('alloy');
+    expect(bootstrapArgs.selector).to.equal('#brand-concierge-mount');
+    expect(bootstrapArgs.stylingConfigurations).to.exist;
+    expect(bootstrapArgs.onBeforeEventSend).to.be.a('function');
+
+    // Verify onBeforeEventSend callback sets up XDM data correctly
+    const content = {};
+    bootstrapArgs.onBeforeEventSend(content);
+    expect(content.xdm).to.exist;
+    expect(content.xdm.web.webPageDetails.URL).to.equal(window.location.href);
+    expect(content.xdm.environment.browserDetails.userAgent).to.equal(window.navigator.userAgent);
+    // eslint-disable-next-line no-underscore-dangle
+    expect(content.xdm.environment._dc.language).to.equal(window.navigator.language);
+
+    // Verify event listener for sign-in is set up on mount element
+    const mount = modal.querySelector('#brand-concierge-mount');
+    expect(mount).to.exist;
+    // Event listener is attached (mount element can receive events)
+    const signInEvent = new CustomEvent('bc:cta-action', {
+      detail: { action: 'sign-in' },
+      bubbles: true,
+    });
+    mount.dispatchEvent(signInEvent);
+
+    // Clean up
+    delete window.adobe;
+  });
+
+  describe('Marquee variant', () => {
+    it('decorates the header with eyebrow (h3), title (h2) and subtitle (p) in order', async () => {
+      document.body.innerHTML = await readFile({ path: './mocks/marquee.html' });
+      const block = document.querySelector('.brand-concierge.marquee');
+      await init(block);
+
+      const header = block.querySelector('.bc-header');
+      expect(header).to.exist;
+      expect(header.querySelector('.bc-header-eyebrow').textContent.trim()).to.equal('Adobe for business');
+      expect(header.querySelector('.bc-header-title').textContent.trim()).to.equal('Grow your business with Adobe.');
+      expect(header.querySelector('.bc-header-subtitle').textContent.trim()).to.equal('Unify data, content, and workflows.');
+
+      const kids = [...header.children];
+      expect(kids[0].classList.contains('bc-header-eyebrow')).to.be.true;
+      expect(kids[1].classList.contains('bc-header-title')).to.be.true;
+      expect(kids[2].classList.contains('bc-header-subtitle')).to.be.true;
+    });
+
+    it('builds a .background layer with per-breakpoint image wrappers in authored order', async () => {
+      document.body.innerHTML = await readFile({ path: './mocks/marquee.html' });
+      const block = document.querySelector('.brand-concierge.marquee');
+      await init(block);
+
+      const background = block.querySelector('.background');
+      expect(background).to.exist;
+      const wrappers = background.querySelectorAll(':scope > div');
+      expect(wrappers.length).to.equal(3);
+      expect(wrappers[0].classList.contains('desktop-only')).to.be.true;
+      expect(wrappers[1].classList.contains('tablet-only')).to.be.true;
+      expect(wrappers[2].classList.contains('mobile-only')).to.be.true;
+      wrappers.forEach((wrapper) => expect(wrapper.querySelector('picture')).to.exist);
+    });
+
+    it('wraps the content in a grid-constrained .foreground.container', async () => {
+      document.body.innerHTML = await readFile({ path: './mocks/marquee.html' });
+      const block = document.querySelector('.brand-concierge.marquee');
+      await init(block);
+
+      const foreground = block.querySelector('.foreground.container');
+      expect(foreground).to.exist;
+      expect(foreground.querySelector('.bc-header')).to.exist;
+      expect(foreground.querySelector('.bc-input-field')).to.exist;
+      expect(foreground.querySelectorAll('.bc-prompt-cards .prompt-card-button').length).to.equal(3);
+      expect(foreground.querySelector('.bc-legal').textContent).to.contain('Terms');
+
+      // the background stays outside the constrained container
+      expect(foreground.querySelector('.background')).to.be.null;
+    });
+
+    it('applies a single authored image without per-breakpoint wrappers', async () => {
+      document.body.innerHTML = await readFile({ path: './mocks/marquee-single-image.html' });
+      const block = document.querySelector('.brand-concierge.marquee');
+      await init(block);
+
+      const background = block.querySelector('.background');
+      expect(background).to.exist;
+      expect(background.querySelectorAll('picture').length).to.equal(1);
+      expect(background.querySelector('.desktop-only, .tablet-only, .mobile-only')).to.be.null;
+    });
+  });
+
+  it('does not render an eyebrow when a single heading is authored', async () => {
+    document.body.innerHTML = await readFile({ path: './mocks/default.html' });
+    const block = document.querySelector('.brand-concierge');
+    await init(block);
+
+    const header = block.querySelector('.bc-header');
+    expect(header.querySelector('.bc-header-eyebrow')).to.be.null;
+    expect(header.querySelector('.bc-header-title').textContent.trim()).to.equal('AI Assistant');
+  });
+
+  it('createSusiComponentForModal creates SUSI component with correct properties and event listeners', () => {
+    const onCloseRedirect = sinon.spy();
+    const onSuccessfulToken = sinon.spy();
+    const onError = sinon.spy();
+
+    const authParams = {
+      dt: false,
+      locale: 'en-us',
+      response_type: 'token',
+      client_id: 'test-client-id',
+    };
+    const config = { consentProfile: 'free', fullWidth: true };
+    const variant = 'standard';
+    const redirectUrl = 'https://example.com/redirect';
+    const isStage = true;
+    const popup = true;
+
+    const susi = createSusiComponentForModal({
+      authParams,
+      config,
+      variant,
+      redirectUrl,
+      isStage,
+      popup,
+      onCloseRedirect,
+      onSuccessfulToken,
+      onError,
+    });
+
+    // Verify element is created
+    expect(susi.tagName.toLowerCase()).to.equal('susi-sentry-light');
+
+    // Verify properties are set correctly
+    expect(susi.authParams).to.deep.include({ ...authParams, redirect_uri: redirectUrl });
+    expect(susi.config).to.equal(config);
+    expect(susi.variant).to.equal(variant);
+    expect(susi.popup).to.be.true;
+    expect(susi.stage).to.equal('true');
+
+    // Test redirect event with popup
+    const redirectEvent = new CustomEvent('redirect', { detail: 'https://example.com/auth' });
+    susi.dispatchEvent(redirectEvent);
+    expect(onCloseRedirect.calledOnce).to.be.true;
+
+    // Test error event
+    const errorEvent = new CustomEvent('on-error', { detail: { error: 'test error' } });
+    susi.dispatchEvent(errorEvent);
+    expect(onError.calledOnce).to.be.true;
+    expect(onError.firstCall.args[0]).to.equal(errorEvent);
+
+    // Test analytics event
+    const analyticsEvent = new CustomEvent('on-analytics');
+    susi.dispatchEvent(analyticsEvent);
+    // Analytics handler is a no-op, just verify it doesn't throw
+
+    // Test successful token event
+    const tokenEvent = new CustomEvent('on-token', { detail: 'test-token' });
+    susi.dispatchEvent(tokenEvent);
+    expect(onSuccessfulToken.calledOnce).to.be.true;
+    expect(onSuccessfulToken.firstCall.args[0].detail).to.equal('test-token');
+
+    // Test auth failed event
+    const authFailedEvent = new CustomEvent('on-auth-failed');
+    susi.dispatchEvent(authFailedEvent);
+    // Auth failed handler is a no-op, just verify it doesn't throw
+
+    // Test without onSuccessfulToken
+    const susiNoToken = createSusiComponentForModal({
+      authParams,
+      config,
+      variant,
+      redirectUrl,
+      isStage: false,
+      popup: true,
+      onCloseRedirect,
+    });
+    const tokenEventNoHandler = new CustomEvent('on-token', { detail: 'test-token' });
+    susiNoToken.dispatchEvent(tokenEventNoHandler);
+    // Should not throw even without onSuccessfulToken handler
   });
 });

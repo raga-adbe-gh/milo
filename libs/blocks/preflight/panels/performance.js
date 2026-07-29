@@ -1,6 +1,6 @@
 import { html, signal, useEffect } from '../../../deps/htm-preact.js';
 import preflightApi from '../checks/preflightApi.js';
-import { STATUS } from '../checks/constants.js';
+import { STATUS_TO_ICON_MAP } from '../checks/constants.js';
 
 const { getLcpEntry, runChecks } = preflightApi.performance;
 
@@ -13,6 +13,8 @@ const fragmentsResult = signal({ icon: 'purple', title: 'Fragments', description
 const personalizationResult = signal({ icon: 'purple', title: 'Personalization', description: 'Checking...' });
 const placeholdersResult = signal({ icon: 'purple', title: 'Placeholders', description: 'Checking...' });
 const iconsResult = signal({ icon: 'purple', title: 'Icons', description: 'Checking...' });
+// null = still checking, true/false once known.
+const lcpExists = signal(null);
 
 /**
  * Runs performance checks and updates signals with the results.
@@ -34,12 +36,7 @@ async function getResults() {
     const signalResult = signals[index];
     return Promise.resolve(resultOrPromise)
       .then((result) => {
-        const statusToIconMap = {
-          [STATUS.PASS]: 'green',
-          [STATUS.FAIL]: 'red',
-          [STATUS.EMPTY]: 'empty',
-        };
-        const icon = statusToIconMap[result.status] ?? 'orange';
+        const icon = STATUS_TO_ICON_MAP[result.status] ?? 'orange';
         signalResult.value = {
           icon,
           title: result.title.replace('Performance - ', ''),
@@ -56,6 +53,12 @@ async function getResults() {
   });
 
   await Promise.all(checkPromises);
+
+  try {
+    lcpExists.value = !!(await getLcpEntry(window.location.pathname, document));
+  } catch {
+    lcpExists.value = false;
+  }
 }
 
 /**
@@ -136,11 +139,14 @@ export default function Panel() {
         <${PerformanceItem} ...${iconsResult.value} />
       </div>
       <div>Unsure on how to get this page fully into the green? Check out the <a class="performance-guidelines" href="https://milo.adobe.com/docs/authoring/performance/" target="_blank">Milo Performance Guidelines</a>.</div>
-      <div> 
+      ${lcpExists.value === false
+    ? html`<div><span class="performance-no-lcp">No LCP element detected on this page.</span></div>`
+    : html`
+      <div>
         <span class="performance-element-preview" onMouseEnter=${highlightElement} onMouseLeave=${removeHighlight}>
           Highlight the found LCP section
-        </span> 
-      </div>
+        </span>
+      </div>`}
       <div class="lcp-tooltip-modal"></div>
     </div>
   `;

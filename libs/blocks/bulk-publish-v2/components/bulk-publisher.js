@@ -9,6 +9,8 @@ import {
   FORM_MODES,
   getJobErrorText,
   getProcessedCount,
+  getInvalidUrlReason,
+  getMixedProjectError,
   isValidUrl,
   processJobResult,
   PROCESS_TYPES,
@@ -28,6 +30,7 @@ class BulkPublish2 extends LitElement {
   static properties = {
     mode: { state: true },
     urls: { state: true },
+    invalidUrls: { state: true },
     process: { state: true },
     disabled: { state: true },
     editing: { state: true },
@@ -44,6 +47,7 @@ class BulkPublish2 extends LitElement {
     super();
     this.mode = sticky().get('mode');
     this.urls = [];
+    this.invalidUrls = [];
     this.process = 'choose';
     this.disabled = true;
     this.editing = false;
@@ -130,13 +134,24 @@ class BulkPublish2 extends LitElement {
   }
 
   validateUrls() {
+    const malformed = this.urls.filter((url) => url.length && !isValidUrl(url));
+    this.invalidUrls = malformed;
     let errors = [];
-    const invalids = this.jobErrors?.urls?.length
+    const { jobErrors } = this;
+    const hasApiErrors = jobErrors && !jobErrors.mixedProject && jobErrors.urls?.length;
+    const invalids = hasApiErrors
       ? this.urls.filter((url) => this.jobErrors.urls.includes(url))
-      : this.urls.filter((url) => !isValidUrl(url) && url.length);
+      : malformed;
 
     if (invalids?.length) {
       errors = [...errors, ...invalids];
+    }
+    if (!errors.length) {
+      const mixedError = getMixedProjectError(this.urls);
+      if (mixedError) {
+        this.jobErrors = { urls: this.urls, messages: [mixedError], mixedProject: true };
+        errors = [...this.urls];
+      }
     }
     if (errors.length === 0) {
       errors = this.urls.length === 0;
@@ -265,6 +280,21 @@ class BulkPublish2 extends LitElement {
           placeholder="Example: ${exUrl}/path/to/page"
           @blur=${this.setUrls}
           @change=${this.setUrls}></textarea>
+        ${this.invalidUrls?.length ? html`
+          <div class="malformed-urls">
+            <strong>Malformed URLs (${this.invalidUrls.length}):</strong>
+            <ul class="malformed-list">
+              ${this.invalidUrls.map((url) => {
+    try {
+      const reason = getInvalidUrlReason(url);
+      return html`<li>${url} — ${reason}</li>`;
+    } catch (e) {
+      return html`<li>${url} — Invalid URL</li>`;
+    }
+  })}
+            </ul>
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -396,6 +426,7 @@ class BulkPublish2 extends LitElement {
   reset() {
     this.disabled = true;
     this.jobErrors = false;
+    this.invalidUrls = [];
     this.urls = [];
     const urls = this.renderRoot.querySelector('#Urls');
     if (urls) urls.value = '';
@@ -407,20 +438,24 @@ class BulkPublish2 extends LitElement {
   async submit() {
     if (!this.isDisabled()) {
       this.processing = 'started';
-      const { authorized, unauthorized } = await getPublishable(this);
-      const job = await startJob({
-        urls: authorized,
-        process: this.process.toLowerCase(),
-        useBulk: this.user.permissions[this.process]?.useBulk ?? false,
-      });
-      const { complete, error } = processJobResult(job);
-      this.jobs = [...this.jobs, ...complete];
-      this.processing = complete.length ? 'job' : false;
-      if (error.length || unauthorized.length) {
-        this.setJobErrors(error, unauthorized);
-      } else {
-        if (this.mode === 'full') this.openJobs = true;
-        this.reset();
+      try {
+        const { authorized, unauthorized } = await getPublishable(this);
+        const job = await startJob({
+          urls: authorized,
+          process: this.process.toLowerCase(),
+          useBulk: this.user.permissions[this.process]?.useBulk ?? false,
+        });
+        const { complete, error } = processJobResult(job);
+        this.jobs = [...this.jobs, ...complete];
+        this.processing = complete.length ? 'job' : false;
+        if (error.length || unauthorized.length) {
+          this.setJobErrors(error, unauthorized);
+        } else {
+          if (this.mode === 'full') this.openJobs = true;
+          this.reset();
+        }
+      } catch (e) {
+        this.processing = false;
       }
     }
   }

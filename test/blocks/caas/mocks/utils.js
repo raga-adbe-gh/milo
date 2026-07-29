@@ -2,11 +2,15 @@ import { stub } from 'sinon';
 
 export const getConfig = () => ({});
 
+export const isBot = () => false;
+
 export const loadStyle = stub();
 
 export const loadScript = stub();
 
-export const localizeLink = (e) => e;
+export const localizeLinkAsync = (e) => e;
+
+export const getCountry = stub().resolves('us');
 
 export const utf8ToB64 = (str) => window.btoa(unescape(encodeURIComponent(str)));
 
@@ -92,5 +96,6 @@ export const parseEncodedConfig = stub().returns({
   totalCardsToShow: 10,
   useLightText: false,
   useOverlayLinks: false,
+  useCenterVideoPlay: false,
   userInfo: [],
 });

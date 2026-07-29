@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Provide the live branch url. ex: https://main--cc--adobecom.hlx.live'
+        description: 'Provide the live branch url. ex: https://main--cc--adobecom.aem.live'
         required: false
         type: string
       milolibs:
@@ -43,6 +43,8 @@ jobs:
           labels: ${{ inputs.tags }}
           IMS_EMAIL: ${{ secrets.IMS_EMAIL }}
           IMS_PASS: ${{ secrets.IMS_PASS }}
+          EMAIL_COLLECTION_IMS_MAIL: ${{ secrets.EMAIL_COLLECTION_IMS_MAIL }}
+          EMAIL_COLLECTION_IMS_PASS: ${{ secrets.EMAIL_COLLECTION_IMS_PASS }}
           HLX_TKN: ${{ secrets.HLX_TKN }}
           SLACK_WH: ${{ secrets.SLACK_WH }}          
       - name: Persist JSON Artifact

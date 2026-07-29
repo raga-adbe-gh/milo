@@ -1,14 +1,17 @@
-import { createTag, getConfig } from '../../utils/utils.js';
+import { createTag, getConfig, localizeLinkAsync } from '../../utils/utils.js';
+import { debounce } from '../../utils/action.js';
 import { postProcessAutoblock, handleCustomAnalyticsEvent } from '../merch/autoblock.js';
-import '../../deps/mas/merch-card.js';
-import '../../deps/mas/merch-quantity-select.js';
+import { mepMasStudioUrls } from '../merch/mas-mep-utils.js';
 import {
   initService,
+  createAemFragment,
   getOptions,
   MEP_SELECTOR,
   overrideOptions,
   updateModalState,
   loadMasComponent,
+  createFragmentErrorEl,
+  isMasErrorEnv,
   MAS_MERCH_CARD,
   MAS_MERCH_QUANTITY_SELECT,
   MAS_MERCH_CARD_COLLECTION,
@@ -30,6 +33,14 @@ const SINGLE_APP_FILTER_MAP = {
   lightroom_1tb: 'photography',
 };
 
+function hasOnlyTargetContent(parent, target) {
+  if (!parent || !target || target.parentElement !== parent) return false;
+  return [...parent.childNodes].every((node) => {
+    if (node === target) return true;
+    return node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '';
+  });
+}
+
 function getTimeoutPromise(timeout) {
   return new Promise((resolve) => {
     setTimeout(() => resolve(false), timeout);
@@ -37,7 +48,9 @@ function getTimeoutPromise(timeout) {
 }
 
 async function loadDependencies(options) {
-  /** Load service first */
+  /** Load lit first as it's needed by MAS components */
+
+  /** Load service */
   const servicePromise = initService();
   const success = await Promise.race([servicePromise, getTimeoutPromise(DEPS_TIMEOUT)]);
   if (!success) {
@@ -72,16 +85,58 @@ async function loadDependencies(options) {
   await Promise.all(dependencyPromises);
 }
 
-function getSidenav(collection) {
+function localizeIconPath(iconPath) {
+  if (window.location.hostname.endsWith('.adobe.com') && iconPath?.match(/http[s]?:\/\/\S*\.(hlx|aem).(page|live)\//)) {
+    try {
+      const url = new URL(iconPath);
+      return `https://www.adobe.com${url.pathname}`;
+    } catch (e) {
+      window.lana?.log(`Invalid URL - ${iconPath}: ${e.toString()}`, {
+        tags: 'merch-card-collection',
+        severity: 'error',
+      });
+    }
+  }
+  return iconPath;
+}
+
+function generateCheckboxGroups(checkboxGroups) {
+  if (!checkboxGroups?.length) return [];
+  const groups = [];
+  for (const group of checkboxGroups) {
+    const { title, label, deeplink, checkboxes } = group;
+    if (checkboxes?.length) {
+      const checkboxGroup = createTag('merch-sidenav-checkbox-group', {
+        sidenavCheckboxTitle: title,
+        label: label || deeplink,
+        deeplink,
+      });
+      for (const checkbox of checkboxes) {
+        const spCheckbox = createTag('sp-checkbox', {
+          emphasized: true,
+          name: checkbox.name,
+          'daa-ll': `${checkbox.label}--${group.deeplink}`,
+        });
+        spCheckbox.textContent = checkbox.label;
+        checkboxGroup.append(spCheckbox);
+      }
+      groups.push(checkboxGroup);
+    }
+  }
+
+  return groups;
+}
+
+async function getSidenav(collection) {
   if (!collection.data) return null;
-  const { hierarchy, placeholders } = collection.data;
+  const { hierarchy, placeholders, sidenavSettings } = collection.data;
   if (!hierarchy?.length) return null;
 
   const titleKey = `${collection.variant}SidenavTitle`;
-  const sidenav = createTag('merch-sidenav', { sidenavTitle: placeholders?.[titleKey] || '' });
+  const sidenav = createTag('merch-sidenav', { sidenavTitle: placeholders?.[titleKey] || '', 'close-text': placeholders?.catalogSidenavClose || '' });
 
   /* Search */
-  const searchText = placeholders?.searchText;
+  const searchText = sidenavSettings?.searchText;
   if (searchText) {
     const spectrumSearch = createTag('sp-search', { placeholder: searchText });
     const search = createTag('merch-search', { deeplink: 'search' });
@@ -90,24 +145,39 @@ function getSidenav(collection) {
   }
 
   /* Filters */
-  const spSidenav = createTag('sp-sidenav', { manageTabIndex: true });
+  const spSidenav = createTag('sp-sidenav', { manageTabIndex: true, label: placeholders?.sidenavFilterCategories || '' });
   spSidenav.setAttribute('manageTabIndex', true);
-  const sidenavList = createTag('merch-sidenav-list', { deeplink: 'filter' }, spSidenav);
+  const deeplink = collection.variant === 'catalog' ? 'category' : 'filter';
+  const sidenavList = createTag('merch-sidenav-list', { deeplink }, spSidenav);
+
+  // Filter items change page content rather than navigate, so button role fits better.
+  sidenavList.updateComplete.then(() => {
+    sidenavList.querySelectorAll('sp-sidenav-item:not([href])').forEach((item) => {
+      item.shadowRoot?.querySelector('a')?.setAttribute('role', 'button');
+    });
+  });
 
   let multilevel = false;
   function generateLevelItems(level, parent) {
     for (const node of level) {
       const value = node.queryLabel || node.label.toLowerCase();
       const item = createTag('sp-sidenav-item', { label: node.label, value });
-      if (node.icon) {
-        createTag('img', { src: node.icon, slot: 'icon' }, null, { parent: item });
+      let iconPath;
+      if (node.icon?.startsWith('sp-icon-')) {
+        createTag(node.icon, { slot: 'icon' }, null, { parent: item });
+        iconPath = node.icon;
+      } else {
+        iconPath = localizeIconPath(node.icon);
+        if (iconPath) {
+          createTag('img', { src: iconPath, slot: 'icon', alt: '' }, null, { parent: item });
+        }
       }
       if (node.iconLight || node.navigationLabel) {
         const attributes = { class: 'selection' };
         if (node.navigationLabel) attributes['data-selected-text'] = node.navigationLabel;
         if (node.iconLight) {
-          attributes['data-light'] = node.iconLight;
-          attributes['data-dark'] = node.icon;
+          attributes['data-light'] = localizeIconPath(node.iconLight);
+          attributes['data-dark'] = iconPath;
         }
         createTag('var', attributes, null, { parent: item });
       }
@@ -124,11 +194,65 @@ function getSidenav(collection) {
 
   sidenav.append(sidenavList);
 
+  /* Checkbox Groups */
+  const checkboxGroupElements = generateCheckboxGroups(sidenavSettings?.tagFilters);
+  for (const group of checkboxGroupElements) {
+    sidenav.append(group);
+  }
+
+  /* Resources List */
+  if (sidenavSettings?.linksTitle && sidenavSettings?.link) {
+    const localizedLink = await localizeLinkAsync(sidenavSettings.link);
+    const resourcesSpSidenav = createTag('sp-sidenav', { manageTabIndex: true, label: placeholders?.sidenavResources || '' });
+    resourcesSpSidenav.classList.add('resources');
+
+    const resourcesList = createTag('merch-sidenav-list', {
+      sidenavListTitle: sidenavSettings.linksTitle,
+      'daa-ll': `${sidenavSettings.linksTitle}--resources`,
+    }, resourcesSpSidenav);
+
+    const resourceItem = createTag('sp-sidenav-item', {
+      href: localizedLink,
+      target: '_blank',
+      'aria-label': placeholders?.catalogSpecialOffersAlt,
+    });
+
+    resourceItem.textContent = sidenavSettings.linkText || 'Link';
+
+    if (sidenavSettings.linkIcon !== false) {
+      const icon = createTag('sp-icon-link-out-light', {
+        class: 'right',
+        slot: 'icon',
+        label: sidenavSettings.linkText || 'Link',
+      });
+      resourceItem.append(icon);
+    }
+
+    resourcesSpSidenav.append(resourceItem);
+    sidenav.append(resourcesList);
+  }
+
   return sidenav;
 }
 
+function generateCardName(card) {
+  let name = card.querySelector('h3')?.textContent;
+  if (!name) return '';
+  name = name.toLowerCase().replace(/[^0-9a-z]/gi, ' ').trim().replaceAll(' ', '-');
+  while (name.includes('--')) {
+    name = name.replaceAll('--', '-');
+  }
+  return name;
+}
+
 function enableSidenavAnalytics(el) {
-  el.sidenav?.addEventListener('merch-sidenav:select', ({ target }) => {
+  if (!el.sidenav) return;
+  const snContainer = el.sidenav.closest('.collection-container');
+  if (snContainer && !snContainer.getAttribute('daa-lh')) {
+    const selectedValue = el.sidenav.querySelector('merch-sidenav-list')?.getAttribute('selected-value');
+    snContainer.setAttribute('daa-lh', `${selectedValue || 'all'}--cat`);
+  }
+  el.sidenav.addEventListener('merch-sidenav:select', ({ target }) => {
     if (!target || target.oldValue === target.selectedValue) return;
     const container = target.closest('.collection-container');
     const updated = container.getAttribute('daa-lh')?.includes('--cat');
@@ -140,18 +264,55 @@ function enableSidenavAnalytics(el) {
   });
 }
 
+function enableAnalytics(el) {
+  enableSidenavAnalytics(el);
+
+  const header = el.parentElement.querySelector('merch-card-collection-header');
+  header?.addEventListener('merch-card-collection:sort', ({ detail }) => {
+    handleCustomAnalyticsEvent(`${detail?.value === 'authored' ? 'popularity' : detail?.value}--sort`, el);
+  });
+
+  el.sidenav?.search?.addEventListener('merch-search:change', debounce((e) => {
+    handleCustomAnalyticsEvent(`${e.detail.value}--search`, el.sidenav.search);
+  }, 1000));
+
+  el.addEventListener('merch-card-collection:showmore', () => {
+    handleCustomAnalyticsEvent('showmore', el);
+  });
+
+  el.addEventListener('merch-card:action-menu-toggle', ({ detail }) => {
+    handleCustomAnalyticsEvent(`menu-toggle--${detail.card}`, el);
+  });
+
+  el.addEventListener('click', ({ target }) => {
+    if (target.tagName === 'MERCH-ICON') {
+      const card = target.closest('merch-card');
+      handleCustomAnalyticsEvent(`merch-icon-click--${card?.name || generateCardName(card)}`, el);
+    }
+  });
+}
+
 export const enableModalOpeningOnPageLoad = () => {
   window.addEventListener('mas:ready', ({ target }) => {
     target.querySelectorAll('[is="checkout-link"][data-modal-id]').forEach((cta) => {
-      updateModalState({ cta });
+      if (!cta.closest('[role="tabpanel"][hidden]')) updateModalState({ cta });
     });
   });
 };
 
+function paintStPriceRed(collection, locale) {
+  const tabsEl = collection.closest('.tab-content-container:not(.red-strikethrough-price)');
+  if (collection.variant === 'plans' && tabsEl && locale?.prefix) {
+    const prefix = locale.prefix.substring(1);
+    const redStPriceGeos = ['gr_el', 'gr_en', 'lt', 'lv', 'pl', 'ro', 'si', 'bg', 'cz', 'ee', 'es', 'hu', 'pt', 'sk', 'hk_en', 'hk_zh', 'ph_en', 'ph_fil', 'th_en', 'th_th', 'tw', 'ng', 'vn_en', 'vn_vi', 'cr', 'ec', 'gt', 'at', 'dk', 'no', 'ca', 'ca_fr', 'ch_de', 'ch_fr', 'ch_it', 'de', 'fi', 'fr', 'nl', 'se', 'au', 'nz', 'uk', 'jp', 'it', 'br'];
+    if (redStPriceGeos.includes(prefix)) tabsEl.classList.add('red-strikethrough-price');
+  }
+}
+
 export async function createCollection(el, options) {
-  const aemFragment = createTag('aem-fragment', { fragment: options.fragment });
+  const aemFragment = createAemFragment(options);
   // Get MEP overrides if available
-  const { mep } = getConfig();
+  const { mep, locale } = getConfig();
   const mepFragments = mep?.inBlock?.[MEP_SELECTOR]?.fragments || {};
   // Create attributes object only if we have fragments
   let attributes;
@@ -163,14 +324,33 @@ export async function createCollection(el, options) {
   }
   const collection = createTag('merch-card-collection', attributes, aemFragment);
   const container = createTag('div', null, collection);
-  let toReplace = el;
-  const contentParent = el.closest('.content');
-  const paragraph = contentParent?.querySelector(':scope > p');
-  if (paragraph) toReplace = paragraph;
+  if (getConfig()?.mep?.preview) {
+    mepMasStudioUrls.set(container, el.href);
+    container.dataset.masBlock = 'collection';
+    // Attach BEFORE the replaceWith below — M@S removes aem-fragment
+    // immediately after dispatching aem:load. Dynamic import keeps
+    // preview-only code out of the production bundle.
+    const { attachAemLoadListener } = await import(
+      '../../features/personalization/preview-mas-subcollection.js'
+    );
+    attachAemLoadListener(aemFragment, container);
+  }
+  const paragraph = el.parentElement;
+  const toReplace = paragraph?.tagName === 'P' && hasOnlyTargetContent(paragraph, el)
+    ? paragraph
+    : el;
   toReplace.replaceWith(container);
 
-  await collection.checkReady();
+  if (isMasErrorEnv()) {
+    collection.addEventListener('aem:error', async (e) => {
+      collection.prepend(await createFragmentErrorEl(options.fragment, 'Collection', e.detail?.status));
+    }, { once: true });
+  }
 
+  const success = await collection.checkReady();
+  if (!success && isMasErrorEnv() && !collection.querySelector('.mas-frag-error')) {
+    collection.prepend(await createFragmentErrorEl(options.fragment, 'Collection'));
+  }
   container.classList.add('collection-container', collection.variant);
 
   /* Sidenav */
@@ -183,7 +363,7 @@ export async function createCollection(el, options) {
       const newUrl = `${window.location.pathname}?${urlParams.toString()}${window.location.hash}`;
       window.history.pushState({}, '', newUrl);
     }
-    const sidenav = getSidenav(collection);
+    const sidenav = await getSidenav(collection);
     if (sidenav) {
       collection.attachSidenav(sidenav);
     }
@@ -192,7 +372,8 @@ export async function createCollection(el, options) {
   await postProcessAutoblock(collection, false);
   collection.requestUpdate();
   // card analytics is enabled in postProcessAutoblock
-  enableSidenavAnalytics(collection);
+  enableAnalytics(collection);
+  paintStPriceRed(collection, locale);
 }
 
 export default async function init(el) {

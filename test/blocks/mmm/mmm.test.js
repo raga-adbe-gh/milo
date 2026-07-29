@@ -2,6 +2,13 @@ import { readFile } from '@web/test-runner-commands';
 import { expect } from '@esm-bundle/chai';
 import { stub } from 'sinon';
 import { DEBOUNCE_TIME, getLocalStorageFilter } from '../../../libs/blocks/mmm/mmm.js';
+import { getConfig } from '../../../libs/utils/utils.js';
+
+const config = getConfig();
+config.mep = {
+  akamaiCode: 'us',
+  consentState: { performance: true, advertising: true },
+};
 
 const delay = (ms = 0) => new Promise((resolve) => {
   setTimeout(() => resolve(), ms);
@@ -47,6 +54,7 @@ describe('MMM', () => {
     document.body.innerHTML = await readFile({ path: './mocks/body.html' });
     const module = await import('../../../libs/blocks/mmm/mmm.js');
     await module.default(document.querySelector('.mmm'));
+    localStorage.clear();
   });
 
   it('Renders with mmm class', async () => {
@@ -97,35 +105,29 @@ describe('MMM', () => {
     expect(loading).to.not.exist;
     const mmmPopup = firstMmmDd.querySelector('.mep-popup');
     expect(mmmPopup).to.exist;
-    const infoColumnOne = mmmPopup.querySelector('.mep-popup-body .mep-columns > .mep-column:nth-child(1)');
-    expect(infoColumnOne.querySelector('div:nth-child(1)').textContent).to.include('Target Integration');
-    expect(infoColumnOne.querySelector('div:nth-child(2)').textContent).to.include('Personalization');
-    expect(infoColumnOne.querySelector('div:nth-child(3)').textContent).to.include('Geo Folder');
-    expect(infoColumnOne.querySelector('div:nth-child(4)').textContent).to.include('Locale');
-    expect(infoColumnOne.querySelector('div:nth-child(5)').textContent).to.include('Last Seen');
-    const infoColumnTwo = mmmPopup.querySelector('.mep-popup-body .mep-columns > .mep-column:nth-child(2)');
-    expect(infoColumnTwo.querySelector('div:nth-child(1)').textContent).to.include('on');
-    expect(infoColumnTwo.querySelector('div:nth-child(2)').textContent).to.include('on');
-    expect(infoColumnTwo.querySelector('div:nth-child(3)').textContent).to.include('Nothing (US)');
-    expect(infoColumnTwo.querySelector('div:nth-child(4)').textContent).to.include('en-us');
+    const infoColumnOne = mmmPopup.querySelector('.mep-popup-body .mep-section-data');
+    expect(infoColumnOne.querySelector('span:nth-child(1)').textContent).to.include('Experience');
+    expect(infoColumnOne.querySelector('span:nth-child(2)').textContent).to.include('default (control)');
+    expect(infoColumnOne.querySelector('span:nth-child(3)').textContent).to.include('Source');
+    expect(infoColumnOne.querySelector('span:nth-child(4)').textContent).to.include('target');
+    expect(infoColumnOne.querySelector('span:nth-child(5)').textContent).to.include('Mktg action');
+    expect(infoColumnOne.querySelector('span:nth-child(6)').textContent).to.include('undefined');
     const mepPopupBody = mmmPopup.querySelector('.mep-popup-body');
     expect(mepPopupBody).to.exist;
     const radios = mepPopupBody.querySelectorAll('select');
+    // 3 = Lingo region + 2 variant selects. M@S market select is gated on
+    // hasMasSurfaces() and this fixture has no M@S content.
     expect(radios.length).to.equal(3);
     const checkboxes = mepPopupBody.querySelectorAll('input[type="checkbox"]');
-    expect(checkboxes.length).to.equal(2);
+    // 5 = mepHighlight + mepFragments + mepCaasHighlight + mepMasHighlight +
+    // mepPreviewButton. mepMasMarketCheckbox is gated on (hasMas && lingoOk);
+    // showManifestsCheckbox is gated on !isMmm.
+    expect(checkboxes.length).to.equal(5);
     const inputs = mepPopupBody.querySelectorAll('input[type="text"]');
     expect(inputs.length).to.equal(1);
-    const manifestColumnOne = mepPopupBody.querySelector('.mep-manifest-info .mep-columns > .mep-column:nth-child(1)');
-    expect(manifestColumnOne.querySelector('div:nth-child(1)').textContent).to.include('Active');
-    expect(manifestColumnOne.querySelector('div:nth-child(2)').textContent).to.include('Source');
-    expect(manifestColumnOne.querySelector('div:nth-child(3)').textContent).to.include('Last seen');
-    const manifestColumnTwo = mepPopupBody.querySelector('.mep-manifest-info .mep-columns > .mep-column:nth-child(2)');
-    expect(manifestColumnTwo.querySelector('div:nth-child(1)').textContent).to.include('default (control)');
-    expect(manifestColumnTwo.querySelector('div:nth-child(2)').textContent).to.include('target');
     const editButton = mepPopupBody.querySelector('.mep-edit-manifest');
     expect(editButton).to.exist;
-    expect(editButton.href).to.equal('https://main--homepage--adobecom.hlx.page/homepage/fragments/mep/hp-11-15-black-friday.json');
+    expect(editButton.href).to.equal('https://main--homepage--adobecom.aem.page/homepage/fragments/mep/hp-11-15-black-friday.json');
     const previewButton = mmmPopup.querySelector('a[data-id="preview-button"]');
     expect(previewButton).to.exist;
   });
@@ -139,7 +141,7 @@ describe('MMM', () => {
     const previewButton = mmmPopup.querySelector('a[data-id="preview-button"]');
     expect(previewButton).to.exist;
     expect(previewButton.href).to.include('https://www.adobe.com/?mep=');
-    const option = mmmPopup.querySelector('option[name="https://main--homepage--adobecom.hlx.page/homepage/fragments/mep/hp-11-15-black-friday.json4"][value="target-apro-twp-abdn"]');
+    const option = mmmPopup.querySelector('option[name="https://main--homepage--adobecom.aem.page/homepage/fragments/mep/hp-11-15-black-friday.json4"][value="target-apro-twp-abdn"]');
     expect(option).to.exist;
     option.click();
     expect(previewButton.href).to.include('https://www.adobe.com/?mep=');
@@ -157,6 +159,19 @@ describe('MMM', () => {
     const event = new Event('change');
     newManifest.dispatchEvent(event);
     expect(previewButton.href).to.include('%2Fadded-manifest.json');
+  });
+
+  it('does not crash and preserves loading state when fetchData returns null', async () => {
+    const [,, thirdButton] = document.body.querySelectorAll('dt button');
+    const thirdDd = document.body.querySelectorAll('dd')[2];
+    expect(thirdDd.querySelector('.loading')).to.exist;
+
+    window.fetch = stub().returns(Promise.resolve({ ok: false }));
+    thirdButton.click();
+    await delay(50);
+
+    expect(thirdDd.classList.contains('placeholder-resolved')).to.be.false;
+    expect(thirdDd.querySelector('.loading')).to.exist;
   });
 
   it('Test filters', async () => {

@@ -1,0 +1,362 @@
+/* Matches georoutingv2 structure: tabs, heading, description, picker (dropdown), current site link */
+.dialog-modal.region-modal {
+  overflow: visible;
+  font-family: 'Adobe Clean', adobe-clean, 'Trebuchet MS', sans-serif;
+}
+
+.dialog-modal.region-modal .georouting-wrapper {
+  padding: 56px 24px 40px;
+}
+
+.dialog-modal.region-modal h3 {
+  margin: 16px 0;
+}
+
+.dialog-modal.region-modal .locale-text {
+  margin: 16px 0 26px;
+}
+
+.dialog-modal.region-modal .link-wrapper {
+  line-height: 48px;
+  position: relative;
+}
+
+.dialog-modal.region-modal a:first-child {
+  margin-inline-end: 24px;
+}
+
+.dialog-modal.region-modal .link-wrapper a:last-child {
+  white-space: nowrap;
+}
+
+.dialog-modal.region-modal span.icon {
+  vertical-align: middle;
+}
+
+.dialog-modal.region-modal img.icon-milo {
+  top: 1px;
+}
+
+.dialog-modal.region-modal .icon-milo.down-arrow {
+  float: right;
+  margin-left: 4px;
+  top: 3px;
+  filter: brightness(0) invert(1);
+}
+
+.dialog-modal.region-modal .picker {
+  position: fixed;
+  margin-top: 2px;
+  background: #FFF 0 0 no-repeat padding-box;
+  box-shadow: 0 1px 4px #00000026;
+  border: 1px solid #B1B1B1;
+  border-radius: 4px;
+  opacity: 1;
+  padding-inline-start: 0;
+  min-width: 176px;
+  margin-bottom: 8px;
+  z-index: 10;
+}
+
+.dialog-modal.region-modal .picker.top {
+  bottom: 41px;
+  position: absolute;
+}
+
+.dialog-modal.region-modal .picker li {
+  list-style-type: none;
+}
+
+.dialog-modal.region-modal .picker li a {
+  width: calc(100% - 12px);
+  display: block;
+  padding-inline-start: 12px;
+  color: #222;
+  font-size: 14px;
+}
+
+.dialog-modal.region-modal .picker li a:hover {
+  background-color: rgb(229 229 229);
+  text-decoration: none;
+}
+
+/* Tabs – same as georoutingv2 */
+.dialog-modal.region-modal .tabs div[role="tablist"] {
+  box-shadow: initial;
+  background: initial;
+  margin: 0;
+}
+
+.dialog-modal.region-modal .tabs div[role="tablist"] .tab-list-container {
+  padding: initial;
+  margin: 2px;
+}
+
+.dialog-modal.region-modal .tabs .paddle {
+  margin: 2px 0;
+  background: var(--tabs-active-bg-color);
+  border-width: 0 0 2px;
+}
+
+.dialog-modal.region-modal .tabs.quiet div[role="tablist"] button[aria-selected="true"] {
+  border-bottom-color: var(--tabs-active-text-color);
+}
+
+.dialog-modal.region-modal .tabs .paddle:disabled {
+  display: none;
+}
+
+.dialog-modal.region-modal .tabs button {
+  border-radius: 0;
+}
+
+.dialog-modal.region-modal .tabs button:focus-visible {
+  outline: 2px solid var(--color-accent-focus-ring);
+  text-decoration: none;
+}
+
+.dialog-modal.region-modal .tabs.quiet div[role="tablist"] button:not(:first-of-type) {
+  margin-inline-start: 24px;
+}
+
+.dialog-modal.region-modal .tabs .tab-content {
+  border-bottom: initial;
+  padding: initial;
+}
+
+@media (min-width: 600px) {
+  .dialog-modal.region-modal .georouting-wrapper {
+    padding: 56px 56px 40px;
+  }
+
+  .dialog-modal.region-modal {
+    max-width: calc((100% - 6px) - 2em);
+  }
+}
+
+@media (min-width: 760px) {
+  .dialog-modal.region-modal {
+    max-width: 720px;
+  }
+}
+
+body:has(.dialog-modal:not(.region-modal)) #region-modal,
+body:has(.dialog-modal:not(.region-modal, .curtain-off)) #region-modal + .modal-curtain.is-open {
+  display: none;
+}
+
+html:has(meta[name="foundation"][content="c2"]) {
+  .dialog-modal.region-modal {
+    .georouting-wrapper {
+      overflow: visible;
+      padding: var(--s2a-spacing-lg);
+
+      &:not(:has(.tabs)) {
+        padding: calc(var(--s2a-spacing-lg) + (2 * var(--s2a-spacing-xs)) + var(--dialog-modal-close-size)) calc(2 * var(--s2a-spacing-lg)) calc(2 * var(--s2a-spacing-lg));
+
+        h3 {
+          padding-top: var(--s2a-spacing-lg);
+        }
+      }
+
+      h3 {
+        font-size: var(--s2a-typography-font-size-heading-5);
+        line-height: var(--s2a-typography-line-height-heading-5);
+        letter-spacing: var(--s2a-typography-letter-spacing-heading-5);
+        margin: 0;
+      }
+    }
+
+    .dialog-close {
+      z-index: 2;
+      right: calc(var(--s2a-spacing-lg) + var(--s2a-spacing-sm));
+      top: calc(var(--s2a-spacing-lg) + var(--s2a-spacing-sm) + var(--s2a-spacing-xs));
+    }
+
+    /* c2 styles for tabs */
+    .tabs {
+      .paddle {
+        top: calc(var(--s2a-spacing-xs) + var(--dialog-modal-close-size) + var(--s2a-spacing-lg));
+        margin: 0;
+        height: 52px;
+      }
+
+      div[role="tablist"] {
+        padding: calc(var(--s2a-spacing-xs) + var(--dialog-modal-close-size) + var(--s2a-spacing-lg)) 0 var(--s2a-spacing-xs);
+
+        .tab-list-container {
+          margin: 0;
+        }
+      }
+
+      &.quiet div[role="tablist"] button {
+        font-weight: var(--s2a-font-weight-adobe-clean-bold);
+        font-size: var(--s2a-typography-font-size-eyebrow);
+        line-height: var(--s2a-typography-line-height-eyebrow);
+        letter-spacing: var(--s2a-typography-letter-spacing-eyebrow);
+        padding: var(--s2a-spacing-md) 0 calc(var(--s2a-spacing-md) - 1px);
+        border-bottom: 1px solid transparent;
+
+        &:hover {
+          border-color: var(--s2a-color-gray-500);
+        }
+
+        &:focus {
+          outline: 2px solid var(--s2a-color-blue-800);
+          outline-offset: -2px;
+          border-color: var(--s2a-color-gray-500);
+        }
+
+        &:not(:first-of-type) {
+          margin-inline-start: var(--s2a-spacing-lg);
+        }
+
+        &[aria-selected="true"] {
+          border-bottom: 1px solid var(--s2a-color-gray-1000);
+        }
+      }
+
+      .tab-content {
+        padding-top: var(--s2a-spacing-lg);
+      }
+    }
+
+    .locale-text {
+      font-size: var(--s2a-typography-font-size-body-md);
+      line-height: var(--s2a-typography-line-height-body-md);
+      letter-spacing: var(--s2a-typography-letter-spacing-body-md);
+      margin-inline: 0 var(--s2a-spacing-sm);
+      margin-block: var(--s2a-spacing-2xs) var(--s2a-spacing-lg);
+    }
+
+    .link-wrapper {
+      padding: var(--s2a-spacing-lg) var(--s2a-spacing-sm) 0 0;
+      line-height: initial;
+
+      > a {
+        font-size: var(--s2a-typography-font-size-body-sm);
+        line-height: var(--s2a-typography-line-height-body-sm);
+        letter-spacing: var(--s2a-typography-letter-spacing-body-sm);
+
+        &:first-child {
+          margin-inline-end: var(--s2a-spacing-md);
+        }
+      }
+
+      .con-button.blue {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        &:hover {
+          background-color: var(--s2a-color-blue-1000);
+          border-color: var(--s2a-color-blue-1000);
+        }
+
+        img {
+          float: none;
+          margin-inline-start: 0;
+          margin-block-start: 3px;
+        }
+      }
+
+      a:last-child {
+        text-decoration: none;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+
+    span.icon {
+      display: inline-flex;
+    }
+
+    .picker {
+      padding: var(--s2a-spacing-xs) 0;
+      box-sizing: border-box;
+      min-width: auto;
+      border-radius: var(--s2a-spacing-sm);
+      border: 1px solid var(--s2a-color-transparent-black-08);
+      margin-top: var(--s2a-spacing-xs);
+
+      &.top {
+        bottom: var(--s2a-spacing-2xl);
+      }
+
+      li {
+        &:not(:last-child) {
+          margin-block-end: var(--s2a-spacing-sm);
+        }
+
+        > a {
+          padding: var(--s2a-spacing-2xs) var(--s2a-spacing-md);
+          font-size: var(--s2a-typography-font-size-body-sm);
+          line-height: var(--s2a-typography-line-height-body-sm);
+          letter-spacing: var(--s2a-typography-letter-spacing-body-sm);
+          box-sizing: border-box;
+          width: 100%;
+          margin-inline-end: 0;
+          text-decoration: none;
+          display: block;
+
+          &:hover {
+            background: transparent;
+            text-decoration: underline;
+          }
+        }
+      }
+    }
+  }
+
+.region-modal .georouting-wrapper > .section {
+  padding: var(--s2a-spacing-sm) var(--s2a-spacing-sm) var(--s2a-spacing-lg) var(--s2a-spacing-lg);
+}
+
+@media (min-width: 760px) {
+  .dialog-modal.region-modal {
+    max-width: calc((100% - 6px) - 2em);
+  }
+}
+
+@media (min-width: 838px) {
+  .dialog-modal.region-modal {
+    max-width: 798px;
+
+    &:has(.tabs) {
+      .dialog-close {
+        top: calc(var(--s2a-spacing-lg) + var(--s2a-spacing-xs) + 25px); /* Adjust based on tab height */
+      }
+    }
+
+    .dialog-close {
+      right: calc(2 * var(--s2a-spacing-lg));
+      top: calc(var(--s2a-spacing-lg) + var(--s2a-spacing-xs));
+    }
+
+    /* c2 styles for tabs */
+    .tabs {
+      .paddle {
+        top: var(--s2a-spacing-xs);
+        height: 62px;
+      }
+
+      div[role="tablist"] {
+        padding: var(--s2a-spacing-xs) 0;
+        width: calc(100% - var(--s2a-spacing-lg) - var(--dialog-modal-close-size));
+      }
+    }
+    /* c2 styles for tabs */
+
+    .link-wrapper > a:first-child {
+      margin-inline-end: var(--s2a-spacing-lg);
+    }
+  }
+
+  .region-modal .georouting-wrapper > .section {
+    padding: 0 var(--s2a-spacing-lg) var(--s2a-spacing-lg);
+  }
+}
+}

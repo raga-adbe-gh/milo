@@ -3,7 +3,7 @@ import { readFile, setViewport } from '@web/test-runner-commands';
 import { expect } from '@esm-bundle/chai';
 import sinon from 'sinon';
 import { waitFor, waitForElement } from '../helpers/waitfor.js';
-import { mockFetch } from '../helpers/generalHelpers.js';
+import { mockFetch, mockRes } from '../helpers/generalHelpers.js';
 import { createTag, customFetch } from '../../libs/utils/utils.js';
 
 const utils = {};
@@ -19,26 +19,27 @@ const stageDomainsMap = {
     'helpx.adobe.com': 'helpx.stage.adobe.com',
     'news.adobe.com': 'news.stage.adobe.com',
   },
-  '--bacom--adobecom.hlx.live': {
+  '--bacom--adobecom.aem.live': {
     'business.adobe.com': 'origin',
-    'blog.adobe.com': 'main--blog--adobecom.hlx.live',
-    'helpx.adobe.com': 'main--helpx--adobecom.hlx.live',
-    'news.adobe.com': 'main--news--adobecom.hlx.live',
+    'blog.adobe.com': 'main--blog--adobecom.aem.live',
+    'helpx.adobe.com': 'main--helpx--adobecom.aem.live',
+    'news.adobe.com': 'main--news--adobecom.aem.live',
   },
-  '--blog--adobecom.hlx.page': {
+  '--blog--adobecom.aem.page': {
     'blog.adobe.com': 'origin',
-    'business.adobe.com': 'main--bacom--adobecom.hlx.page',
-    'helpx.adobe.com': 'main--helpx--adobecom.hlx.page',
-    'news.adobe.com': 'main--news--adobecom.hlx.page',
+    'business.adobe.com': 'main--bacom--adobecom.aem.page',
+    'helpx.adobe.com': 'main--helpx--adobecom.aem.page',
+    'news.adobe.com': 'main--news--adobecom.aem.page',
   },
   '.business-graybox.adobe.com': { 'business.adobe.com': 'origin' },
+  'dev6-nest.creativecloud.adobe.com': { 'creativecloud.adobe.com': 'stage.creativecloud.adobe.com' },
 };
 const stageDomainsMapWRegex = {
-  hostname: 'stage--milo--owner.hlx.page',
+  hostname: 'stage--milo--owner.aem.page',
   map: {
-    '^https://.*--milo--owner.hlx.page': {
-      '^https://www.adobe.com/acrobat': 'https://main--dc--adobecom.hlx.page',
-      '^https://business.adobe.com/blog': 'https://main--bacom-blog--adobecom.hlx.page',
+    '^https://.*--milo--owner.aem.page': {
+      '^https://www.adobe.com/acrobat': 'https://main--dc--adobecom.aem.page',
+      '^https://business.adobe.com/blog': 'https://main--bacom-blog--adobecom.aem.page',
       '^https://business.adobe.com': 'https://business.stage.adobe.com',
       '^https://www.adobe.com': 'origin',
     },
@@ -183,7 +184,7 @@ describe('Utils', () => {
         setViewport({ width: 600, height: 1500 });
         await waitForElement('.disable-autoblock');
         const disableAutoBlockLink = document.querySelector('.disable-autoblock');
-        utils.decorateLinks(disableAutoBlockLink);
+        await utils.decorateLinksAsync(disableAutoBlockLink);
         expect(disableAutoBlockLink.href).to.equal('https://www.instagram.com/');
       });
 
@@ -220,18 +221,22 @@ describe('Utils', () => {
       it('Implements a login action', async () => {
         await waitForElement('.login-action');
         const login = document.querySelector('.login-action');
-        utils.decorateLinks(login);
+        await utils.decorateLinksAsync(login);
         expect(login.href).to.equal('https://www.adobe.com/');
       });
       it('Implements a copy link action', async () => {
         await waitForElement('.copy-action');
         const copy = document.querySelector('.copy-action');
-        utils.decorateLinks(copy);
+        await utils.decorateLinksAsync(copy);
         expect(copy.classList.contains('copy-link')).to.be.true;
       });
       it('triggers the event listener on clicking the custom links', async () => {
+        await waitForElement('.login-action');
+        await waitForElement('.copy-action');
         const login = document.querySelector('.login-action');
         const copy = document.querySelector('.copy-action');
+        expect(login).to.exist;
+        expect(copy).to.exist;
         const clickEvent = new Event('click', { bubbles: true, cancelable: true });
         const preventDefaultSpy = sinon.spy(clickEvent, 'preventDefault');
         login.dispatchEvent(clickEvent);
@@ -320,7 +325,7 @@ describe('Utils', () => {
       try {
         await utils.loadScript('/test/utils/mocks/error.js');
       } catch (err) {
-        expect(err.message).to.equal('error loading script: http://localhost:2000/test/utils/mocks/error.js');
+        expect(err.message).to.equal(`error loading script: ${window.location.origin}/test/utils/mocks/error.js`);
       }
     });
 
@@ -381,8 +386,8 @@ describe('Utils', () => {
     });
 
     it('Decorates meta helix url', () => {
-      const meta = document.head.querySelector('[name="hlx-url"]');
-      expect(meta.content).to.equal('http://localhost:2000/otis');
+      const meta = document.head.querySelector('[name="aem-url"]');
+      expect(meta.content).to.equal(`${window.location.origin}/otis`);
     });
 
     it('Adds an event listener for modal:open', async () => {
@@ -438,7 +443,7 @@ describe('Utils', () => {
       const alloyLink = marquee.querySelector('a');
       const alloyString = alloyLink.href.split('#_')?.find((s) => s.startsWith('alloy:'));
       expect(alloyLink.href).to.contain('#_alloy:');
-      utils.decorateLinks(marquee);
+      await utils.decorateLinksAsync(marquee);
       waitFor(() => {
         expect(alloyLink.href).to.not.contain('#_alloy:');
         alloyLink.click();
@@ -451,19 +456,35 @@ describe('Utils', () => {
         expect(eventPayload.data.__adobe.target).to.deep.equal({ [`${profile}.${business}`]: value });
       }, 10);
     });
-    it('Add rel=nofollow to a link', () => {
+    it('Add rel=nofollow to a link', async () => {
       const noFollowContainer = document.querySelector('main div');
-      utils.decorateLinks(noFollowContainer);
+      await utils.decorateLinksAsync(noFollowContainer);
       const noFollowLink = noFollowContainer.querySelector('.no-follow');
       expect(noFollowLink.rel).to.contain('nofollow');
       expect(noFollowLink.href).to.equal('https://www.adobe.com/test');
     });
 
-    it('Add data-attribute "data-http-link" if http shceme found', () => {
+    it('Add data-attribute "data-http-link" if http shceme found', async () => {
       const linksContainer = document.querySelector('main div');
-      utils.decorateLinks(linksContainer);
+      await utils.decorateLinksAsync(linksContainer);
       const httpLink = linksContainer.querySelector('[data-http-link]');
       expect(httpLink.dataset.httpLink).to.equal('true');
+    });
+
+    it('Add data-attribute "hasDnt" for links with #_dnt hash to avoid localizing when in deeply nested inline fragments', async () => {
+      const container = document.createElement('div');
+      container.innerHTML = '<p><a class="dnt-link" href="https://www.adobe.com/test#_dnt">Do Not Track Link</a></p>';
+      await utils.decorateLinksAsync(container);
+      const dntLink = container.querySelector('.dnt-link');
+      expect(dntLink.dataset.hasDnt).to.equal('true');
+    });
+
+    it('Should transform invalid anchor link to valid', async () => {
+      const container = document.createElement('div');
+      container.innerHTML = '<p><a href="https://#test">Test</a></p>';
+      await utils.decorateLinksAsync(container);
+      const link = container.querySelector('a');
+      expect(link.href).to.equal(`${window.location.href}#test`);
     });
 
     it('Sets up milo.deferredPromise', async () => {
@@ -552,69 +573,69 @@ describe('Utils', () => {
         config.pathname = path;
         utils.setConfig(config);
       }
-      it('Same domain link is relative and localized', () => {
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions', 'main--milo--adobecom.hlx.page')).to.equal('/be_fr/gnav/solutions');
+      it('Same domain link is relative and localized', async () => {
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions', 'main--milo--adobecom.aem.page')).to.equal('/be_fr/gnav/solutions');
       });
 
-      it('Same domain fragment link is relative and localized', () => {
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/fragments/gnav/solutions', 'main--milo--adobecom.hlx.page')).to.equal('/be_fr/fragments/gnav/solutions');
+      it('Same domain fragment link is relative and localized', async () => {
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/fragments/gnav/solutions', 'main--milo--adobecom.aem.page')).to.equal('/be_fr/fragments/gnav/solutions');
       });
 
-      it('Same domain langstore link is relative and localized', () => {
+      it('Same domain langstore link is relative and localized', async () => {
         setConfigPath('/langstore/fr/page');
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions', 'main--milo--adobecom.hlx.page')).to.equal('/langstore/fr/gnav/solutions');
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions', 'main--milo--adobecom.aem.page')).to.equal('/langstore/fr/gnav/solutions');
         setConfigPath('/be_fr/page');
       });
 
-      it('Same domain extensions /, .html, .json are handled', () => {
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions.html', 'main--milo--adobecom.hlx.page')).to.equal('/be_fr/gnav/solutions.html');
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions.json', 'main--milo--adobecom.hlx.page')).to.equal('/be_fr/gnav/solutions.json');
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions/', 'main--milo--adobecom.hlx.page')).to.equal('/be_fr/gnav/solutions/');
+      it('Same domain extensions /, .html, .json are handled', async () => {
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions.html', 'main--milo--adobecom.aem.page')).to.equal('/be_fr/gnav/solutions.html');
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions.json', 'main--milo--adobecom.aem.page')).to.equal('/be_fr/gnav/solutions.json');
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions/', 'main--milo--adobecom.aem.page')).to.equal('/be_fr/gnav/solutions/');
       });
 
-      it('Same domain link that is already localized is returned as relative', () => {
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/be_fr/gnav/solutions', 'main--milo--adobecom.hlx.page')).to.equal('/be_fr/gnav/solutions');
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/fi/gnav/solutions', 'main--milo--adobecom.hlx.page')).to.equal('/fi/gnav/solutions');
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/fi', 'main--milo--adobecom.hlx.page')).to.equal('/fi');
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/langstore/fr/gnav/solutions', 'main--milo--adobecom.hlx.page')).to.equal('/langstore/fr/gnav/solutions');
+      it('Same domain link that is already localized is returned as relative', async () => {
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/be_fr/gnav/solutions', 'main--milo--adobecom.aem.page')).to.equal('/be_fr/gnav/solutions');
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/fi/gnav/solutions', 'main--milo--adobecom.aem.page')).to.equal('/fi/gnav/solutions');
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/fi', 'main--milo--adobecom.aem.page')).to.equal('/fi');
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/langstore/fr/gnav/solutions', 'main--milo--adobecom.aem.page')).to.equal('/langstore/fr/gnav/solutions');
       });
 
-      it('Same domain PDF link is returned as relative and not localized', () => {
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions.pdf', 'main--milo--adobecom.hlx.page')).to.equal('/gnav/solutions.pdf');
+      it('Same domain PDF link is returned as relative and not localized', async () => {
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions.pdf', 'main--milo--adobecom.aem.page')).to.equal('/gnav/solutions.pdf');
       });
 
-      it('Same domain link with #_dnt is returned as relative, #_dnt is removed and not localized', () => {
-        expect(utils.localizeLink('https://main--milo--adobecom.hlx.page/gnav/solutions#_dnt', 'main--milo--adobecom.hlx.page'))
+      it('Same domain link with #_dnt is returned as relative, #_dnt is removed and not localized', async () => {
+        expect(await utils.localizeLinkAsync('https://main--milo--adobecom.aem.page/gnav/solutions#_dnt', 'main--milo--adobecom.aem.page'))
           .to
           .equal('/gnav/solutions');
       });
 
-      it('Live domain html link  is absolute and localized', () => {
-        expect(utils.localizeLink('https://milo.adobe.com/solutions/customer-experience-personalization-at-scale.html', 'main--milo--adobecom.hlx.page'))
+      it('Live domain html link  is absolute and localized', async () => {
+        expect(await utils.localizeLinkAsync('https://milo.adobe.com/solutions/customer-experience-personalization-at-scale.html', 'main--milo--adobecom.aem.page'))
           .to
           .equal('https://milo.adobe.com/be_fr/solutions/customer-experience-personalization-at-scale.html');
-        expect(utils.localizeLink('https://www.adobe.com/solutions/customer-experience-personalization-at-scale.html', 'main--milo--adobecom.hlx.page'))
+        expect(await utils.localizeLinkAsync('https://www.adobe.com/solutions/customer-experience-personalization-at-scale.html', 'main--milo--adobecom.aem.page'))
           .to
           .equal('https://www.adobe.com/be_fr/solutions/customer-experience-personalization-at-scale.html');
       });
 
-      it('Live domain html link which is not in prod domains is absolute and localized', () => {
-        expect(utils.localizeLink('https://test.adobe.com/solutions/customer-experience-personalization-at-scale.html', window.location.hostname, true))
+      it('Live domain html link which is not in prod domains is absolute and localized', async () => {
+        expect(await utils.localizeLinkAsync('https://test.adobe.com/solutions/customer-experience-personalization-at-scale.html', window.location.hostname, true))
           .to
           .equal('https://test.adobe.com/be_fr/solutions/customer-experience-personalization-at-scale.html');
-        expect(utils.localizeLink('https://test.adobe.com/solutions/customer-experience-personalization-at-scale.html', window.location.hostname, true))
+        expect(await utils.localizeLinkAsync('https://test.adobe.com/solutions/customer-experience-personalization-at-scale.html', window.location.hostname, true))
           .to
           .equal('https://test.adobe.com/be_fr/solutions/customer-experience-personalization-at-scale.html');
       });
 
-      it('Live domain html link with #_dnt is left absolute, not localized and #_dnt is removed', () => {
-        expect(utils.localizeLink('https://milo.adobe.com/solutions/customer-experience-personalization-at-scale.html#_dnt', 'main--milo--adobecom.hlx.page'))
+      it('Live domain html link with #_dnt is left absolute, not localized and #_dnt is removed', async () => {
+        expect(await utils.localizeLinkAsync('https://milo.adobe.com/solutions/customer-experience-personalization-at-scale.html#_dnt', 'main--milo--adobecom.aem.page'))
           .to
           .equal('https://milo.adobe.com/solutions/customer-experience-personalization-at-scale.html');
       });
 
-      it('Invalid href fails gracefully', () => {
-        expect(utils.localizeLink('not-a-url', 'main--milo--adobecom.hlx.page'))
+      it('Invalid href fails gracefully', async () => {
+        expect(await utils.localizeLinkAsync('not-a-url', 'main--milo--adobecom.aem.page'))
           .to
           .equal('not-a-url');
       });
@@ -647,6 +668,32 @@ describe('Utils', () => {
   });
 
   describe('stageDomainsMap', () => {
+    it('should not corrupt hostnames when removing locale', async () => {
+      const localePrefix = '/de';
+      const stageConfig = {
+        ...config,
+        env: { name: 'stage' },
+        stageDomainsMap,
+        locale: { prefix: localePrefix },
+      };
+      const localeString = localePrefix.replace(/^\//, '');
+      const [hostname] = Object.entries(stageDomainsMap)
+        .find(([h]) => h.includes(localeString));
+      const a = utils.createTag('a', { href: `https://${hostname}${localePrefix}/some/path` });
+
+      utils.convertStageLinks({
+        anchors: [a],
+        config: stageConfig,
+        hostname,
+        href: `https://${hostname}`,
+      });
+
+      const converted = new URL(a.href);
+      expect(converted.hostname).to.contain(localeString);
+      expect(converted.pathname).to.equal(`${localePrefix}/some/path`);
+      expect(converted.pathname).to.not.contain(`${localePrefix}${localePrefix}/`);
+    });
+
     it('should convert links when stageDomainsMap provided without regex', async () => {
       const stageConfig = {
         ...config,
@@ -858,7 +905,8 @@ describe('Utils', () => {
   describe('useDotHtml', async () => {
     beforeEach(async () => {
       window.lana = { log: (msg) => console.error(msg) };
-      document.body.innerHTML = await readFile({ path: './mocks/useDotHtml.html' });
+      const html = await readFile({ path: './mocks/useDotHtml.html' });
+      document.body.innerHTML = html.replaceAll('http://localhost:2000', window.location.origin);
     });
     afterEach(() => {
       window.lana.release?.();
@@ -866,7 +914,7 @@ describe('Utils', () => {
     it('should add .html to relative links when enabled', async () => {
       utils.setConfig({ useDotHtml: true, htmlExclude: [/exclude\/.*/gm] });
       expect(utils.getConfig().useDotHtml).to.be.true;
-      await utils.decorateLinks(document.getElementById('linklist'));
+      await utils.decorateLinksAsync(document.getElementById('linklist'));
       expect(document.getElementById('excluded')?.getAttribute('href'))
         .to.equal('/exclude/this/page');
       const htmlLinks = document.querySelectorAll('.has-html');
@@ -878,7 +926,7 @@ describe('Utils', () => {
     it('should not add .html to relative links when disabled', async () => {
       utils.setConfig({ useDotHtml: false, htmlExclude: [/exclude\/.*/gm] });
       expect(utils.getConfig().useDotHtml).to.be.false;
-      await utils.decorateLinks(document.getElementById('linklist'));
+      await utils.decorateLinksAsync(document.getElementById('linklist'));
       expect(document.getElementById('excluded')?.getAttribute('href'))
         .to.equal('/exclude/this/page');
       const htmlLinks = document.querySelectorAll('.has-html');
@@ -956,7 +1004,7 @@ describe('Utils', () => {
 
   describe('personalization', async () => {
     const MANIFEST_JSON = {
-      info: { total: 2, offset: 0, limit: 2, data: [{ key: 'manifest-type', value: 'Personalization' }, { key: 'manifest-override-name', value: '' }, { key: 'name', value: '1' }] }, placeholders: { total: 0, offset: 0, limit: 0, data: [] }, experiences: { total: 1, offset: 0, limit: 1, data: [{ action: 'insertContentAfter', selector: '.marquee', 'page filter (optional)': '/products/special-offers', chrome: 'https://main--milo--adobecom.hlx.page/drafts/mariia/fragments/personalizationtext' }] }, ':version': 3, ':names': ['info', 'placeholders', 'experiences'], ':type': 'multi-sheet',
+      info: { total: 2, offset: 0, limit: 2, data: [{ key: 'manifest-type', value: 'Personalization' }, { key: 'manifest-override-name', value: '' }, { key: 'name', value: '1' }] }, placeholders: { total: 0, offset: 0, limit: 0, data: [] }, experiences: { total: 1, offset: 0, limit: 1, data: [{ action: 'insertContentAfter', selector: '.marquee', 'page filter (optional)': '/products/special-offers', chrome: 'https://main--milo--adobecom.aem.page/drafts/mariia/fragments/personalizationtext' }] }, ':version': 3, ':names': ['info', 'placeholders', 'experiences'], ':type': 'multi-sheet',
     };
     function htmlResponse() {
       return new Promise((resolve) => {
@@ -1080,8 +1128,8 @@ describe('Utils', () => {
       ['.mp4', `${origin}/media_1234.mp4`, true],
       ['.mp4', `${origin}/media_1234.mp3`, false],
       ['.mp4', 'https://fake-website.com/media_1234.mp4', false],
-      ['.mp4', 'https://main--milo--adobecom.hlx.page/media_1234.mp4', true],
-      ['.mp4', 'https://main--milo--adobecom.hlx.live/media_1234.mp4', true],
+      ['.mp4', 'https://main--milo--adobecom.aem.page/media_1234.mp4', true],
+      ['.mp4', 'https://main--milo--adobecom.aem.live/media_1234.mp4', true],
       ['.mp4', 'https://main--milo--adobecom.aem.page/media_1234.mp4', true],
       ['.mp4', 'https://main--milo--adobecom.aem.live/media_1234.mp4', true],
       ['.mp4', 'https://adobe.com/media_1234.mp4', true],
@@ -1119,7 +1167,7 @@ describe('Utils', () => {
 
     // --- Tests for localizeLink ---
     describe('localizeLink', () => {
-      it('uses locale prefix when no language-based logic applies', () => {
+      it('uses locale prefix when no language-based logic applies', async () => {
         utils.setConfig({
           ...baseConfig,
           pathname: '/de/',
@@ -1129,12 +1177,12 @@ describe('Utils', () => {
           },
         });
         const href = 'https://examplesite.com/path';
-        const result = utils.localizeLink(href, 'examplesite.com');
+        const result = await utils.localizeLinkAsync(href, 'examplesite.com');
         expect(utils.getConfig().locale.prefix).to.equal('/de');
         expect(result).to.equal('/de/path');
       });
 
-      it('adjusts prefix to locale when no site match', () => {
+      it('adjusts prefix to locale when no site match', async () => {
         utils.setConfig({
           ...baseConfig,
           pathname: '/ch_de/',
@@ -1151,7 +1199,7 @@ describe('Utils', () => {
           },
         });
         const href = 'https://othersite.com/path';
-        const result = utils.localizeLink(href, 'othersite.com');
+        const result = await utils.localizeLinkAsync(href, 'othersite.com');
         expect(utils.getConfig().locale.prefix).to.equal('/ch_de');
         expect(utils.getConfig().locale.language).to.be.undefined;
         expect(result).to.equal('/ch_de/path');
@@ -1186,7 +1234,7 @@ describe('Utils', () => {
         });
         await utils.loadLanguageConfig();
         const href = 'https://news.adobe.com/path';
-        const result = utils.localizeLink(href, 'news.adobe.com');
+        const result = await utils.localizeLinkAsync(href, 'news.adobe.com');
         expect(utils.getConfig().locale.prefix).to.equal('/en/gb');
         expect(utils.getConfig().locale.language).to.equal('en');
         expect(result).to.equal('/en/gb/path');
@@ -1237,7 +1285,7 @@ describe('Utils', () => {
         await utils.loadLanguageConfig();
 
         const href = 'https://news.adobe.com/path';
-        const result = utils.localizeLink(href);
+        const result = await utils.localizeLinkAsync(href);
         expect(utils.getConfig().locale.prefix).to.equal('/de/ch');
         expect(utils.getConfig().locale.language).to.equal('de');
         expect(result).to.equal('https://news.adobe.com/ch_de/path');
@@ -1273,7 +1321,7 @@ describe('Utils', () => {
         });
         await utils.loadLanguageConfig();
         const href = 'https://news.adobe.com/path';
-        const result = utils.localizeLink(href, 'news.adobe.com');
+        const result = await utils.localizeLinkAsync(href, 'news.adobe.com');
         expect(utils.getConfig().locale.prefix).to.equal('/ch_de');
         expect(utils.getConfig().locale.language).to.be.undefined;
         expect(result).to.equal('/ch_de/path');
@@ -1285,13 +1333,13 @@ describe('Utils', () => {
           languages: { en: { tk: 'hah7vzn.css' } },
         });
         const href = '/path';
-        const result = utils.localizeLink(href);
+        const result = await utils.localizeLinkAsync(href);
         expect(utils.getConfig().locale.prefix).to.equal('');
         expect(utils.getConfig().locale.language).to.equal('en');
         expect(result).to.equal('/path');
       });
 
-      it('skips language logic on localhost', () => {
+      it('skips language logic on localhost', async () => {
         utils.setConfig({
           ...baseConfig,
           pathname: '/de/ch/',
@@ -1308,7 +1356,7 @@ describe('Utils', () => {
           },
         });
         const href = 'http://localhost/path';
-        const result = utils.localizeLink(href);
+        const result = await utils.localizeLinkAsync(href);
         expect(utils.getConfig().locale.prefix).to.equal('/de/ch');
         expect(utils.getConfig().locale.language).to.equal('de');
         expect(result).to.equal('/de/ch/path');
@@ -1491,6 +1539,1727 @@ describe('Utils', () => {
       const cssLink = document.head.querySelector('link[href*="icons.css"]');
       expect(cssLink).to.not.be.null;
       expect(cssLink.getAttribute('rel')).to.equal('stylesheet');
+    });
+  });
+
+  describe('loadLink stylesheet dedup', () => {
+    afterEach(() => {
+      document.head.querySelectorAll('link[data-milo-preload-test]').forEach((l) => l.remove());
+    });
+
+    it('loadStyle applies a stylesheet even when a preload for the same href exists', () => {
+      const href = 'data:text/css,x';
+      const preload = utils.loadLink(href, { rel: 'preload', as: 'style' });
+      preload.setAttribute('data-milo-preload-test', '');
+
+      let cbType;
+      const styleLink = utils.loadStyle(href, (type) => { cbType = type; });
+      styleLink.setAttribute('data-milo-preload-test', '');
+
+      // The preload must not shadow the stylesheet: a distinct rel=stylesheet
+      // link is created so the CSS actually applies (the #6210 icon regression).
+      expect(styleLink).to.not.equal(preload);
+      expect(styleLink.getAttribute('rel')).to.equal('stylesheet');
+      expect(preload.getAttribute('rel')).to.equal('preload');
+      expect(document.head.querySelectorAll(`link[href="${href}"]`).length).to.equal(2);
+
+      // A second loadStyle dedups against the stylesheet: no duplicate, noop callback.
+      const again = utils.loadStyle(href, (type) => { cbType = type; });
+      expect(again).to.equal(styleLink);
+      expect(cbType).to.equal('noop');
+      expect(document.head.querySelectorAll(`link[href="${href}"][rel="stylesheet"]`).length).to.equal(1);
+    });
+  });
+
+  describe('Lingo Link Transformation', () => {
+    let originalFetch;
+    let fetchStub;
+    let lingoUtils;
+    let originalLana;
+
+    const createQueryIndexData = (paths) => ({ data: paths.map((path) => ({ path })) });
+    const lingoSiteMapping = {
+      'site-locales': {
+        data: [
+          {
+            uniqueSiteId: 'cc',
+            baseSite: '/de',
+            regionalSites: '/ch_de, /at',
+          },
+          {
+            uniqueSiteId: 'dc',
+            baseSite: '/de',
+            regionalSites: '/ch_de',
+          },
+          {
+            uniqueSiteId: 'da-bacom',
+            baseSite: '/de',
+            regionalSites: '/ch_de, /ch_fr, /at',
+          },
+        ],
+      },
+      'site-query-index-map': {
+        data: [
+          {
+            uniqueSiteId: 'cc',
+            queryIndexWebPath: 'www.adobe.com/*/cc-shared/assets/lingo/query-index.json',
+          },
+          {
+            uniqueSiteId: 'dc',
+            queryIndexWebPath: 'www.adobe.com/*/dc-shared/assets/lingo/query-index.json',
+          },
+          {
+            uniqueSiteId: 'da-bacom',
+            queryIndexWebPath: 'business.adobe.com/*/assets/lingo/query-index.json',
+          },
+        ],
+      },
+    };
+
+    const ccRegionalQueryIndex = createQueryIndexData([
+      '/ch_de/creativecloud/product',
+      '/ch_de/creativecloud/features',
+    ]);
+    const ccBaseQueryIndex = createQueryIndexData([
+      '/de/creativecloud/product',
+      '/de/creativecloud/features',
+      '/de/creativecloud/pricing',
+    ]);
+    const dcRegionalQueryIndex = createQueryIndexData([
+      '/ch_de/acrobat/reader',
+    ]);
+    const daBacomRegionalQueryIndex = createQueryIndexData([
+      '/ch_de/products/experience-platform/agent-orchestrator',
+    ]);
+    const daBacomBaseQueryIndex = createQueryIndexData([
+      '/de/products/experience-platform/agent-orchestrator',
+      '/de/products/acrobat-business',
+    ]);
+
+    const defaultTestConfig = {
+      locales: {
+        '': { ietf: 'en-US', tk: 'hah7vzn.css' },
+        de: { ietf: 'de-DE', tk: 'hah7vzn.css' },
+        ch_de: { ietf: 'de-CH', tk: 'hah7vzn.css', base: 'de' },
+      },
+      prodDomains: ['www.adobe.com', 'business.adobe.com'],
+      pathname: '/ch_de/creativecloud/',
+      uniqueSiteId: 'cc',
+      contentRoot: '/cc-shared',
+    };
+
+    const setupDefaultFetchStub = () => {
+      fetchStub.callsFake((url) => {
+        if (url.includes('lingo-site-mapping')) {
+          return mockRes({ payload: lingoSiteMapping });
+        }
+        if (url.includes('cc-shared') && url.includes('/ch_de/')) {
+          return mockRes({ payload: ccRegionalQueryIndex });
+        }
+        if (url.includes('cc-shared') && url.includes('/de/')) {
+          return mockRes({ payload: ccBaseQueryIndex });
+        }
+        if (url.includes('dc-shared') && url.includes('/ch_de/')) {
+          return mockRes({ payload: dcRegionalQueryIndex });
+        }
+        if (url.includes('business.adobe.com') && url.includes('/ch_de/')) {
+          return mockRes({ payload: daBacomRegionalQueryIndex });
+        }
+        if (url.includes('business.adobe.com') && url.includes('/de/')) {
+          return mockRes({ payload: daBacomBaseQueryIndex });
+        }
+        return mockRes({ payload: { data: [] } });
+      });
+    };
+
+    beforeEach(async () => {
+      originalFetch = window.fetch;
+      originalLana = window.lana;
+      fetchStub = sinon.stub();
+      window.fetch = fetchStub;
+      setupDefaultFetchStub();
+      // cache busting
+      const timestamp = Date.now();
+      const module = await import(`../../libs/utils/utils.js?t=${timestamp}`);
+      lingoUtils = module;
+      lingoUtils.setConfig(defaultTestConfig);
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('content', 'on');
+      lingoMeta.setAttribute('name', 'langfirst');
+      document.head.append(lingoMeta);
+    });
+
+    afterEach(() => {
+      window.fetch = originalFetch;
+      if (originalLana) {
+        window.lana = originalLana;
+      } else {
+        delete window.lana;
+      }
+      const meta = document.querySelector('meta[name="langfirst"]');
+      if (meta) document.head.removeChild(meta);
+    });
+
+    it('should use regional prefix when regional page exists in query index', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/creativecloud/product';
+      document.body.appendChild(a);
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/product',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(new URL(a.href).pathname).to.equal('/ch_de/creativecloud/product');
+      a.remove();
+    });
+
+    it('should use base prefix when regional page does not exist in query index', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/creativecloud/pricing';
+      document.body.appendChild(a);
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/pricing',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(new URL(a.href).pathname).to.equal('/de/creativecloud/pricing');
+      a.remove();
+    });
+
+    it('should check all indexes via pending listener including slow subsites', async () => {
+      let dcRegionalResolved = false;
+
+      fetchStub.callsFake((url) => {
+        if (url.includes('cc-shared') && url.includes('/ch_de/')) {
+          return mockRes({ payload: createQueryIndexData(['/ch_de/creativecloud/product']) });
+        }
+        if (url.includes('cc-shared') && url.includes('/de/')) {
+          return mockRes({ payload: ccBaseQueryIndex });
+        }
+        if (url.includes('lingo-site-mapping')) {
+          return mockRes({ payload: lingoSiteMapping });
+        }
+        if (url.includes('dc-shared') && url.includes('/ch_de/')) {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              dcRegionalResolved = true;
+              resolve({
+                ok: true,
+                json: () => Promise.resolve(dcRegionalQueryIndex),
+              });
+            }, 100);
+          });
+        }
+        return mockRes({ payload: { data: [] } });
+      });
+
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/creativecloud/pricing';
+      document.body.appendChild(a);
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/pricing',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(dcRegionalResolved).to.be.true;
+      expect(new URL(a.href).pathname).to.equal('/de/creativecloud/pricing');
+      a.remove();
+    });
+
+    it('should use base index race for early decision before slow subsites resolve', async () => {
+      let dcResolved = false;
+
+      fetchStub.callsFake((url) => {
+        if (url.includes('cc-shared') && url.includes('/ch_de/')) {
+          return mockRes({ payload: createQueryIndexData(['/ch_de/creativecloud/product']) });
+        }
+        if (url.includes('cc-shared') && !url.includes('/ch_de/')) {
+          return mockRes({ payload: ccBaseQueryIndex });
+        }
+        if (url.includes('lingo-site-mapping')) {
+          return mockRes({ payload: lingoSiteMapping });
+        }
+        if (url.includes('dc-shared')) {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              dcResolved = true;
+              resolve({ ok: true, json: () => Promise.resolve(dcRegionalQueryIndex) });
+            }, 200);
+          });
+        }
+        return mockRes({ payload: { data: [] } });
+      });
+
+      const primaryLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_PRIMARY_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/creativecloud/pricing';
+      document.body.appendChild(a);
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/pricing',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await primaryLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(dcResolved).to.be.false;
+      expect(new URL(a.href).pathname).to.equal('/de/creativecloud/pricing');
+      a.remove();
+    });
+
+    it('should handle links to current subsite, other subsites, and other domains via lingo-site-mapping', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+
+      const links = [
+        'https://www.adobe.com/creativecloud/product',
+        'https://www.adobe.com/creativecloud/pricing',
+        'https://www.adobe.com/acrobat/reader',
+        'https://www.adobe.com/acrobat/pro',
+        'https://business.adobe.com/products/experience-platform/agent-orchestrator',
+        'https://business.adobe.com/products/acrobat-business',
+      ];
+      const anchors = links.map((href) => {
+        const a = document.createElement('a');
+        a.href = href;
+        document.body.appendChild(a);
+        return a;
+      });
+      for (let i = 0; i < links.length; i += 1) {
+        anchors[i].href = await lingoUtils.localizeLinkAsync(
+          links[i],
+          'www.adobe.com',
+          false,
+          anchors[i],
+        );
+      }
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(new URL(anchors[0].href).pathname).to.equal('/ch_de/creativecloud/product');
+      expect(new URL(anchors[1].href).pathname).to.equal('/de/creativecloud/pricing');
+      expect(new URL(anchors[2].href).pathname).to.equal('/ch_de/acrobat/reader');
+      expect(new URL(anchors[3].href).pathname).to.equal('/de/acrobat/pro');
+      expect(anchors[4].href).to.include('/ch_de/products/experience-platform/agent-orchestrator');
+      expect(anchors[5].href).to.include('/de/products/acrobat-business');
+
+      anchors.forEach((a) => a.remove());
+    });
+
+    it('should handle JSON files without query index lookup', async () => {
+      const result = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/data/config.json',
+        'www.adobe.com',
+      );
+
+      // JSON files: no aTag, no query index lookup — defaults to base prefix
+      expect(result).to.equal('/de/data/config.json');
+    });
+
+    it('should handle errors gracefully when query index fails to load', async () => {
+      fetchStub.callsFake((url) => {
+        if (url.includes('query-index')) {
+          return mockRes({ payload: null, ok: false, status: 404 });
+        }
+        if (url.includes('lingo-site-mapping')) {
+          return mockRes({ payload: lingoSiteMapping });
+        }
+        return mockRes({ payload: { data: [] } });
+      });
+
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/creativecloud/product';
+      document.body.appendChild(a);
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/product',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(new URL(a.href).pathname).to.equal('/de/creativecloud/product');
+      a.remove();
+    });
+
+    it('should revert to regional prefix for domains not configured in lingo site mapping', async () => {
+      lingoUtils.setConfig({
+        ...defaultTestConfig,
+        prodDomains: ['www.adobe.com', 'business.adobe.com', 'stock.adobe.com'],
+      });
+
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://stock.adobe.com/photos/sunset';
+      document.body.appendChild(a);
+      await lingoUtils.localizeLinkAsync(
+        'https://stock.adobe.com/photos/sunset',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      // stock.adobe.com is not in lingo-site-mapping, listener reverts to regional
+      expect(new URL(a.href).pathname).to.equal('/ch_de/photos/sunset');
+      a.remove();
+    });
+
+    it('should not apply lingo logic when locale has no base', async () => {
+      lingoUtils.setConfig({
+        ...defaultTestConfig,
+        locales: {
+          '': { ietf: 'en-US', tk: 'hah7vzn.css' },
+          ch_de: { ietf: 'de-DE', tk: 'hah7vzn.css' },
+        },
+        pathname: '/ch_de/creativecloud/pricing',
+      });
+
+      const result = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/pricing',
+        'www.adobe.com',
+      );
+
+      // Should just use the regular prefix without query index lookup
+      expect(result).to.equal('/ch_de/creativecloud/pricing');
+    });
+
+    it('should not handle links that are already localized', async () => {
+      const result = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/ch_de/creativecloud/pricing',
+        'www.adobe.com',
+      );
+
+      // Already localized links should be returned as-is
+      expect(result).to.equal('/ch_de/creativecloud/pricing');
+    });
+
+    it('should handle relative links on same domain', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a1 = document.createElement('a');
+      a1.href = 'https://localhost/creativecloud/product';
+      document.body.appendChild(a1);
+      a1.href = await lingoUtils.localizeLinkAsync(
+        'https://localhost/creativecloud/product',
+        window.location.hostname,
+        false,
+        a1,
+      );
+      const a2 = document.createElement('a');
+      a2.href = 'https://localhost/creativecloud/pricing';
+      document.body.appendChild(a2);
+      a2.href = await lingoUtils.localizeLinkAsync(
+        'https://localhost/creativecloud/pricing',
+        window.location.hostname,
+        false,
+        a2,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(new URL(a1.href).pathname).to.equal('/ch_de/creativecloud/product');
+      expect(new URL(a2.href).pathname).to.equal('/de/creativecloud/pricing');
+      a1.remove();
+      a2.remove();
+    });
+
+    it('should handle HTML extensions properly', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a1 = document.createElement('a');
+      a1.href = 'https://www.adobe.com/creativecloud/product.html';
+      document.body.appendChild(a1);
+      a1.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/product.html',
+        'www.adobe.com',
+        false,
+        a1,
+      );
+      const a2 = document.createElement('a');
+      a2.href = 'https://www.adobe.com/creativecloud/pricing.html';
+      document.body.appendChild(a2);
+      a2.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/pricing.html',
+        'www.adobe.com',
+        false,
+        a2,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(new URL(a1.href).pathname).to.equal('/ch_de/creativecloud/product.html');
+      expect(new URL(a2.href).pathname).to.equal('/de/creativecloud/pricing.html');
+      a1.remove();
+      a2.remove();
+    });
+
+    it('should handle multiple concurrent link localizations', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const hrefs = [
+        'https://www.adobe.com/creativecloud/product',
+        'https://www.adobe.com/creativecloud/pricing',
+        'https://www.adobe.com/creativecloud/features',
+      ];
+      const anchors = hrefs.map((href) => {
+        const a = document.createElement('a');
+        a.href = href;
+        document.body.appendChild(a);
+        return a;
+      });
+      await Promise.all(anchors.map(async (a, i) => {
+        a.href = await lingoUtils.localizeLinkAsync(hrefs[i], 'localhost', false, a);
+      }));
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(anchors[0].href).to.include('/ch_de/creativecloud/product');
+      expect(anchors[1].href).to.include('/de/creativecloud/pricing');
+      expect(anchors[2].href).to.include('/ch_de/creativecloud/features');
+      anchors.forEach((a) => a.remove());
+    });
+
+    it('fetches fetchPriority-flagged cross-site indexes before the low-priority remainder', async () => {
+      // `dc` is flagged fetchPriority: 'yes'; `da-bacom` is not. The flagged
+      // entry must be fetched in the priority wave (before the barrier, at
+      // default priority), while the rest are deferred at { priority: 'low' }.
+      const priorityMapping = {
+        'site-locales': lingoSiteMapping['site-locales'],
+        'site-query-index-map': {
+          data: [
+            {
+              uniqueSiteId: 'cc',
+              queryIndexWebPath: 'www.adobe.com/*/cc-shared/assets/lingo/query-index.json',
+            },
+            {
+              uniqueSiteId: 'dc',
+              queryIndexWebPath: 'www.adobe.com/*/dc-shared/assets/lingo/query-index.json',
+              fetchPriority: 'yes',
+            },
+            {
+              uniqueSiteId: 'da-bacom',
+              queryIndexWebPath: 'business.adobe.com/*/assets/lingo/query-index.json',
+            },
+          ],
+        },
+      };
+
+      fetchStub.callsFake((url) => {
+        if (url.includes('lingo-site-mapping')) {
+          return mockRes({ payload: priorityMapping });
+        }
+        if (url.includes('cc-shared') && url.includes('/ch_de/')) {
+          return mockRes({ payload: createQueryIndexData(['/ch_de/creativecloud/product']) });
+        }
+        if (url.includes('cc-shared') && url.includes('/de/')) {
+          return mockRes({ payload: ccBaseQueryIndex });
+        }
+        if (url.includes('dc-shared')) {
+          return mockRes({ payload: dcRegionalQueryIndex });
+        }
+        if (url.includes('business.adobe.com')) {
+          return mockRes({ payload: daBacomRegionalQueryIndex });
+        }
+        return mockRes({ payload: { data: [] } });
+      });
+
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/creativecloud/product';
+      document.body.appendChild(a);
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/creativecloud/product',
+        'www.adobe.com',
+        false,
+        a,
+      );
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      const calls = fetchStub.getCalls();
+      const dcIdx = calls.findIndex((c) => c.args[0].includes('dc-shared'));
+      const daBacomIdx = calls.findIndex(
+        (c) => c.args[0].includes('business.adobe.com') && c.args[0].includes('/ch_de/'),
+      );
+
+      // Both cross-site indexes were fetched.
+      expect(dcIdx).to.be.greaterThan(-1);
+      expect(daBacomIdx).to.be.greaterThan(-1);
+      // The flagged (`dc`) index is issued before the barrier resolves — i.e.
+      // before the low-priority remainder (`da-bacom`) is even requested.
+      expect(dcIdx).to.be.lessThan(daBacomIdx);
+      // Flagged entry fetched with no explicit priority hint (default);
+      // the remainder is deferred at low priority.
+      expect(calls[dcIdx].args[1]?.priority).to.be.undefined;
+      expect(calls[daBacomIdx].args[1]?.priority).to.equal('low');
+
+      a.remove();
+    });
+  });
+
+  describe('resolveCrossSiteIndex', () => {
+    let resolveCrossSiteIndex;
+
+    before(async () => {
+      const mod = await import('../../libs/utils/utils.js');
+      ({ resolveCrossSiteIndex } = mod);
+    });
+
+    const baseEntry = { queryIndexWebPath: 'business.adobe.com/*/assets/lingo/query-index.json' };
+
+    it('uses prod host with no suffix on prod', () => {
+      const { url, host } = resolveCrossSiteIndex(
+        { ...baseEntry, stageHost: 'business.stage.adobe.com' },
+        '/fr',
+        '',
+        'business.adobe.com',
+      );
+      expect(url).to.equal('https://business.adobe.com/fr/assets/lingo/query-index.json');
+      expect(host).to.equal('business.adobe.com');
+    });
+
+    it('uses stage host with -preview suffix on .stage.adobe.com when stageHost set', () => {
+      const { url, host } = resolveCrossSiteIndex(
+        { ...baseEntry, stageHost: 'business.stage.adobe.com' },
+        '/fr',
+        '-preview',
+        'business.stage.adobe.com',
+      );
+      expect(url).to.equal('https://business.stage.adobe.com/fr/assets/lingo/query-index-preview.json');
+      expect(host).to.equal('business.stage.adobe.com');
+    });
+
+    it('falls back to prod host with no suffix on .stage.adobe.com when stageHost missing', () => {
+      const { url, host } = resolveCrossSiteIndex(
+        { ...baseEntry },
+        '/fr',
+        '-preview',
+        'business.stage.adobe.com',
+      );
+      expect(url).to.equal('https://business.adobe.com/fr/assets/lingo/query-index.json');
+      expect(host).to.equal('business.adobe.com');
+    });
+
+    it('falls back to prod host on .aem.page (cross-origin auth required)', () => {
+      const { url, host } = resolveCrossSiteIndex(
+        { ...baseEntry, stageHost: 'business.stage.adobe.com' },
+        '/fr',
+        '-preview',
+        'feature--milo--adobecom.aem.page',
+      );
+      expect(url).to.equal('https://business.adobe.com/fr/assets/lingo/query-index.json');
+      expect(host).to.equal('business.adobe.com');
+    });
+
+    it('handles cc-shared path (no /lingo/ segment) correctly', () => {
+      const { url } = resolveCrossSiteIndex(
+        {
+          queryIndexWebPath: 'www.adobe.com/*/cc-shared/assets/query-index.json',
+          stageHost: 'www.stage.adobe.com',
+        },
+        '/fr',
+        '-preview',
+        'www.stage.adobe.com',
+      );
+      expect(url).to.equal('https://www.stage.adobe.com/fr/cc-shared/assets/query-index-preview.json');
+    });
+  });
+
+  describe('Language Banner in Utils', () => {
+    let fetchStub;
+    const sandbox = sinon.createSandbox();
+    const setConfigForTest = (pathname = '/', locales = {
+      '': { ietf: 'en-US', prefix: '' },
+      de: { ietf: 'de-DE', prefix: '/de' },
+      fr: { ietf: 'fr-FR', prefix: '/fr' },
+      it: { ietf: 'it-IT', prefix: '/it' },
+      jp: { ietf: 'ja-JP', prefix: '/jp' },
+    }) => {
+      const bannerConfig = {
+        imsClientId: 'milo',
+        codeRoot: '/libs',
+        contentRoot: window.location.origin,
+        locales,
+        pathname,
+      };
+      utils.setConfig(bannerConfig);
+    };
+
+    const mockMarkets = {
+      data: [
+        {
+          prefix: '', lang: 'en', languageName: 'English', text: 'This page is also available in', continueText: 'Continue', supportedRegions: 'us, gb',
+        },
+        {
+          prefix: 'de', lang: 'de', languageName: 'Deutsch', text: 'Diese Seite ist auch auf', continueText: 'Weiter', supportedRegions: 'de, at, ch, us', regionPriorities: 'ch:1, lu:2',
+        },
+        {
+          prefix: 'fr', lang: 'fr', languageName: 'Français', text: 'Cette page est également disponible en', continueText: 'Continuer', supportedRegions: 'fr, ch', regionPriorities: 'ch:2, lu:1',
+        },
+        {
+          prefix: 'it', lang: 'it', languageName: 'Italiano', text: 'Visualizza questa pagina in', continueText: 'Continuare', supportedRegions: 'it, ch', regionPriorities: 'ch:3',
+        },
+        {
+          prefix: 'jp', lang: 'ja', languageName: '日本語', text: 'このページは次の言語でもご覧いただけます', continueText: '続行', supportedRegions: 'jp',
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      fetchStub = sandbox.stub(window, 'fetch');
+      fetchStub.withArgs(sinon.match('/federal/assets/data/lingo-site-mapping.json')).resolves({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+      sandbox.stub(console, 'warn');
+      document.head.innerHTML = '';
+      document.body.innerHTML = '';
+    });
+
+    afterEach(() => {
+      sandbox.restore();
+      document.cookie = 'international=; expires= Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      sessionStorage.clear();
+      if (navigator.language) delete navigator.language;
+    });
+
+    const mockGeo = (country = 'us') => {
+      const res = new Response(JSON.stringify({ country }), {
+        status: 200,
+        headers: { 'Content-type': 'application/json' },
+      });
+      fetchStub.withArgs(sinon.match('geo2.adobe.com')).resolves(res);
+    };
+
+    const mockMarketsConfig = (marketConfig = mockMarkets) => {
+      fetchStub.withArgs(sinon.match('supported-markets')).resolves({
+        ok: true,
+        json: () => Promise.resolve(JSON.parse(JSON.stringify(marketConfig))),
+      });
+    };
+
+    it('does not show banner if disabled via metadata', async () => {
+      document.head.innerHTML = '<meta name="language-banner" content="off">';
+      setConfigForTest('/');
+      await utils.loadArea();
+      expect(document.querySelector('.language-banner')).to.be.null;
+    });
+
+    it('does not show banner if international cookie is already set to the page locale', async () => {
+      document.cookie = 'international=de; path=/';
+      setConfigForTest('/de/page');
+      await utils.loadArea();
+      expect(document.querySelector('.language-banner')).to.be.null;
+    });
+    it('does not show banner if preferred language is the same as page language', async () => {
+      setConfigForTest('/de/page');
+      mockGeo('de');
+      mockMarketsConfig();
+      Object.defineProperty(navigator, 'language', { value: 'de-DE', configurable: true });
+      await utils.loadArea();
+      expect(document.querySelector('.language-banner')).to.be.null;
+    });
+
+    it('does not show banner if geo location cannot be determined', async () => {
+      setConfigForTest('/');
+      fetchStub.withArgs(sinon.match('geo2.adobe.com')).resolves({ ok: false, statusText: 'Not Found' });
+      mockMarketsConfig();
+      await utils.loadArea();
+      expect(document.querySelector('.language-banner')).to.be.null;
+    });
+
+    it('does not show banner if markets config is not available', async () => {
+      setConfigForTest('/');
+      mockGeo('de');
+      fetchStub.withArgs(sinon.match('supported-markets')).resolves({ ok: false });
+      await utils.loadArea();
+      expect(document.querySelector('.language-banner')).to.be.null;
+    });
+
+    it('does not show banner for supported market if no preferred market is available', async () => {
+      setConfigForTest('/');
+      mockGeo('us');
+      mockMarketsConfig();
+      Object.defineProperty(navigator, 'language', { value: 'fr-FR', configurable: true });
+      await utils.loadArea();
+      expect(document.querySelector('.language-banner')).to.be.null;
+    });
+  });
+
+  describe('MEP Lingo Preprocessing in decorateLinksAsync', () => {
+    let lingoMeta;
+    let testContainer;
+
+    beforeEach(() => {
+      document.head.innerHTML = '';
+      document.body.innerHTML = '';
+      document.body.className = '';
+      lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      testContainer = document.createElement('div');
+      testContainer.id = 'test-container';
+      testContainer.classList.add('section');
+      document.body.appendChild(testContainer);
+    });
+
+    afterEach(() => {
+      lingoMeta?.remove();
+      testContainer?.remove();
+    });
+
+    it('sets data-mep-lingo and removes #_mep-lingo hash from link', async () => {
+      testContainer.innerHTML = `
+        <div class="container">
+          <p><a href="https://www.adobe.com/fragments/test#_mep-lingo">Fragment Link</a></p>
+        </div>
+      `;
+      const container = testContainer.querySelector('.container');
+      await utils.decorateLinksAsync(container);
+      const link = container.querySelector('a');
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.href).to.not.include('#_mep-lingo');
+      expect(link.href).to.equal('https://www.adobe.com/fragments/test');
+    });
+
+    it('verifies lingoActive is true when langfirst meta is set', async () => {
+      const lingoValue = utils.getMetadata('langfirst');
+      expect(lingoValue).to.equal('on');
+    });
+
+    it('detects mep-lingo row with mep-lingo block and sets mepLingoBlockSwap', async () => {
+      // Structure: .section > div.mep-lingo > div (row) > div (cells)
+      testContainer.innerHTML = `
+        <div class="mep-lingo">
+          <div>
+            <div>mep-lingo</div>
+            <div><a href="https://www.adobe.com/fragments/test">Fragment</a></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.dataset.mepLingoBlockSwap).to.equal('mep-lingo');
+    });
+
+    it('detects mep-lingo row in section-metadata and sets mepLingoSectionSwap', async () => {
+      // Structure: .section > div.section-metadata > div (row) > div (cells)
+      testContainer.innerHTML = `
+        <div class="section-metadata">
+          <div>
+            <div>mep-lingo</div>
+            <div><a href="https://www.adobe.com/fragments/test#_mep-lingo">Fragment</a></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.dataset.mepLingoSectionSwap).to.equal('true');
+      expect(link.href).to.not.include('#_mep-lingo');
+    });
+
+    it('detects mep-lingo row in regular block and sets mepLingoBlockSwap to block name', async () => {
+      // Structure: .section > div.marquee > div (row) > div (cells)
+      testContainer.innerHTML = `
+        <div class="marquee">
+          <div>
+            <div>mep-lingo</div>
+            <div><a href="https://www.adobe.com/fragments/test#_mep-lingo">Fragment</a></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.dataset.mepLingoBlockSwap).to.equal('marquee');
+      expect(link.href).to.not.include('#_mep-lingo');
+    });
+
+    it('handles link wrapped in strong tag', async () => {
+      testContainer.innerHTML = `
+        <div class="mep-lingo">
+          <div>
+            <div>mep-lingo</div>
+            <div><strong><a href="https://www.adobe.com/fragments/test">Fragment</a></strong></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.dataset.mepLingoBlockSwap).to.equal('mep-lingo');
+    });
+
+    it('handles link wrapped in em tag', async () => {
+      testContainer.innerHTML = `
+        <div class="mep-lingo">
+          <div>
+            <div>mep-lingo</div>
+            <div><em><a href="https://www.adobe.com/fragments/test">Fragment</a></em></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.dataset.mepLingoBlockSwap).to.equal('mep-lingo');
+    });
+
+    it('handles lowercase mep-lingo text', async () => {
+      testContainer.innerHTML = `
+        <div class="mep-lingo">
+          <div>
+            <div>mep-lingo</div>
+            <div><a href="https://www.adobe.com/fragments/test">Fragment</a></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+    });
+
+    it('does not match uppercase MEP-LINGO text (case sensitive)', async () => {
+      // detectMepLingoSwap uses toLowerCase().trim() === 'mep-lingo'
+      // so uppercase should still match after toLowerCase
+      testContainer.innerHTML = `
+        <div class="mep-lingo">
+          <div>
+            <div>MEP-LINGO</div>
+            <div><a href="https://www.adobe.com/fragments/test">Fragment</a></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link).to.exist;
+      expect(link.dataset.mepLingo).to.equal('true');
+    });
+
+    it('always detects #_mep-lingo hash even when lingo is not active', async () => {
+      // Detection always happens for fallback/invalid handling purposes
+      lingoMeta.setAttribute('content', 'off');
+      testContainer.innerHTML = `
+        <div class="container">
+          <p><a href="https://www.adobe.com/fragments/test#_mep-lingo">Fragment Link</a></p>
+        </div>
+      `;
+      const container = testContainer.querySelector('.container');
+      await utils.decorateLinksAsync(container);
+      const link = container.querySelector('a');
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.href).to.not.include('#_mep-lingo');
+    });
+
+    it('does not set mepLingo for non-mep-lingo rows', async () => {
+      testContainer.innerHTML = `
+        <div class="some-block">
+          <div>
+            <div>not-mep-lingo</div>
+            <div><a href="https://www.adobe.com/test">Regular Link</a></div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link.dataset.mepLingo).to.be.undefined;
+    });
+
+    it('does not set mepLingo when cellText does not match', async () => {
+      testContainer.innerHTML = `
+        <div class="some-block">
+          <div>
+            <div>other-text</div>
+            <div><a href="https://www.adobe.com/page">Regular Page</a></div>
+          </div>
+        </div>
+      `;
+      const link = testContainer.querySelector('a');
+      await utils.decorateLinksAsync(testContainer);
+      expect(link.dataset.mepLingo).to.be.undefined;
+    });
+
+    it('sets mepLingoBlockSwap for block with multiple rows', async () => {
+      testContainer.innerHTML = `
+        <div class="marquee">
+          <div>
+            <div>mep-lingo</div>
+            <div><a href="https://www.adobe.com/fragments/test">Fragment</a></div>
+          </div>
+          <div>
+            <div>Other Content</div>
+          </div>
+        </div>
+      `;
+      await utils.decorateLinksAsync(testContainer);
+      const link = testContainer.querySelector('a');
+      expect(link.dataset.mepLingo).to.equal('true');
+      expect(link.dataset.mepLingoBlockSwap).to.equal('marquee');
+    });
+  });
+
+  describe('Base page non-blocking link localization', () => {
+    let originalFetch;
+    let fetchStub;
+    let lingoUtils;
+    let originalLana;
+
+    const createQueryIndexData = (paths) => ({ data: paths.map((path) => ({ path })) });
+
+    const lingoSiteMapping = {
+      'site-locales': {
+        data: [
+          { uniqueSiteId: 'cc', baseSite: '/', regionalSites: '/sg' },
+          { uniqueSiteId: 'da-bacom', baseSite: '/', regionalSites: '/sg' },
+        ],
+      },
+      'site-query-index-map': {
+        data: [
+          { uniqueSiteId: 'cc', queryIndexWebPath: 'www.adobe.com/*/cc-shared/assets/lingo/query-index.json' },
+          { uniqueSiteId: 'da-bacom', queryIndexWebPath: 'business.adobe.com/*/assets/lingo/query-index.json' },
+        ],
+      },
+    };
+
+    const siteRegionalQueryIndex = createQueryIndexData([
+      '/sg/products/photoshop',
+      '/sg/products/illustrator',
+    ]);
+    const bacomRegionalQueryIndex = createQueryIndexData([
+      '/sg/products/experience-platform',
+    ]);
+
+    const basePageConfig = {
+      locales: {
+        '': { ietf: 'en-US', tk: 'hah7vzn.css' },
+        sg: { ietf: 'en-SG', tk: 'hah7vzn.css', base: '' },
+      },
+      prodDomains: ['www.adobe.com', 'business.adobe.com'],
+      pathname: '/',
+      uniqueSiteId: 'cc',
+      contentRoot: '/cc-shared',
+      codeRoot: '/libs',
+    };
+
+    const setupFetchStub = () => {
+      fetchStub.callsFake((url) => {
+        if (url.includes('lingo-site-mapping')) {
+          return mockRes({ payload: lingoSiteMapping });
+        }
+        if (url.includes('cc-shared') && url.includes('/sg/')) {
+          return mockRes({ payload: siteRegionalQueryIndex });
+        }
+        if (url.includes('business.adobe.com') && url.includes('/sg/')) {
+          return mockRes({ payload: bacomRegionalQueryIndex });
+        }
+        if (url.includes('geo.js') || url.includes('geo')) {
+          return mockRes({ payload: { country: 'sg' } });
+        }
+        return mockRes({ payload: { data: [] } });
+      });
+    };
+
+    beforeEach(async () => {
+      originalFetch = window.fetch;
+      originalLana = window.lana;
+      fetchStub = sinon.stub();
+      window.fetch = fetchStub;
+      setupFetchStub();
+      sessionStorage.setItem('akamai', 'sg');
+      const timestamp = Date.now();
+      const module = await import(`../../libs/utils/utils.js?t=${timestamp}`);
+      lingoUtils = module;
+      lingoUtils.setConfig(basePageConfig);
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('content', 'on');
+      lingoMeta.setAttribute('name', 'langfirst');
+      document.head.append(lingoMeta);
+    });
+
+    afterEach(() => {
+      window.fetch = originalFetch;
+      if (originalLana) {
+        window.lana = originalLana;
+      } else {
+        delete window.lana;
+      }
+      const meta = document.querySelector('meta[name="langfirst"]');
+      if (meta) document.head.removeChild(meta);
+      sessionStorage.removeItem('akamai');
+    });
+
+    it('should set base prefix initially and upgrade to regional when primary indexes load', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/products/photoshop';
+      document.body.appendChild(a);
+
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/photoshop',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(a.href).to.include('/sg/products/photoshop');
+      a.remove();
+    });
+
+    it('should keep base prefix when regional path does not exist in index', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/products/premiere';
+      document.body.appendChild(a);
+
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/premiere',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(a.href).to.not.include('/sg/');
+      a.remove();
+    });
+
+    it('should not attach pending listener for #_dnt links', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      // Trigger index loading with a regular link
+      const trigger = document.createElement('a');
+      trigger.href = 'https://www.adobe.com/products/illustrator';
+      document.body.appendChild(trigger);
+      trigger.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/illustrator',
+        'www.adobe.com',
+        false,
+        trigger,
+      );
+
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/products/photoshop#_dnt';
+      document.body.appendChild(a);
+
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/photoshop#_dnt',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(a.href).to.not.include('#_dnt');
+      expect(a.href).to.not.include('/sg/');
+      trigger.remove();
+      a.remove();
+    });
+
+    it('should default to base prefix when no aTag is passed', async () => {
+      const result = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/photoshop',
+        'www.adobe.com',
+      );
+
+      // No aTag: defaults to base prefix, not regional
+      expect(result).to.equal('/products/photoshop');
+    });
+
+    it('should use base prefix for regular fragments on base page', async () => {
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/fragments/some-fragment';
+      document.body.appendChild(a);
+
+      const result = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/fragments/some-fragment',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      // Regular fragments on base page always use base prefix
+      expect(result).to.equal('/fragments/some-fragment');
+      a.remove();
+    });
+
+    it('should not update href when path has not changed', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/products/premiere';
+      document.body.appendChild(a);
+
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/premiere',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(new URL(a.href).pathname).to.equal('/products/premiere');
+      a.remove();
+    });
+
+    it('should clean up listener when element is disconnected', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/products/photoshop';
+      document.body.appendChild(a);
+
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/photoshop',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      a.remove();
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      expect(a.href).to.not.include('/sg/');
+    });
+
+    it('should preserve origin and query/hash when upgrading path', async () => {
+      const allLoaded = new Promise((resolve) => {
+        const evt = lingoUtils.MILO_EVENTS.QUERY_INDEX_ALL_LOADED;
+        window.addEventListener(evt, resolve, { once: true });
+      });
+      const a = document.createElement('a');
+      a.href = 'https://www.adobe.com/products/photoshop?trackingid=123#section';
+      document.body.appendChild(a);
+
+      a.href = await lingoUtils.localizeLinkAsync(
+        'https://www.adobe.com/products/photoshop?trackingid=123#section',
+        'www.adobe.com',
+        false,
+        a,
+      );
+
+      await allLoaded;
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+
+      const updatedUrl = new URL(a.href);
+      expect(updatedUrl.pathname).to.equal('/sg/products/photoshop');
+      expect(updatedUrl.search).to.equal('?trackingid=123');
+      expect(updatedUrl.hash).to.equal('#section');
+      a.remove();
+    });
+  });
+
+  describe('computeDetectedMarketCountry', () => {
+    it('prefers country query param over country cookie', () => {
+      expect(utils.computeDetectedMarketCountry('?country=lu', 'be', null)).to.equal('lu');
+    });
+
+    it('prefers akamaiLocale query param over country cookie when country param absent', () => {
+      expect(utils.computeDetectedMarketCountry('?akamaiLocale=fr', 'be', null)).to.equal('fr');
+    });
+
+    it('prefers country cookie over geo hint when no country/akamai params', () => {
+      expect(utils.computeDetectedMarketCountry('', 'lu', 'ng')).to.equal('lu');
+    });
+  });
+
+  describe('getCountry query params', () => {
+    // getCountry reads PAGE_URL.searchParams (frozen at module load); the optional
+    // searchParams arg is the test seam. skipFallback=true avoids the geo import.
+    const params = (qs) => new URLSearchParams(qs);
+    const country = (qs) => utils.getCountry(true, params(qs));
+
+    beforeEach(() => sessionStorage.removeItem('akamai'));
+    afterEach(() => sessionStorage.removeItem('akamai'));
+
+    it('reads the country param (country-only)', async () => {
+      expect(await country('country=sg')).to.equal('sg');
+    });
+
+    it('reads the akamaiLocale param (akamaiLocale-only)', async () => {
+      expect(await country('akamaiLocale=sg')).to.equal('sg');
+    });
+
+    it('resolves ?country=sg the same as ?akamaiLocale=sg', async () => {
+      expect(await country('country=sg')).to.equal(await country('akamaiLocale=sg'));
+    });
+
+    it('prefers country over akamaiLocale when both are set', async () => {
+      expect(await country('country=sg&akamaiLocale=fr')).to.equal('sg');
+    });
+
+    it('falls through to akamaiLocale when country is invalid', async () => {
+      expect(await country('country=123&akamaiLocale=fr')).to.equal('fr');
+    });
+
+    it('falls through to sessionStorage when neither param is valid', async () => {
+      sessionStorage.setItem('akamai', 'de');
+      expect(await country('country=1&akamaiLocale=99')).to.equal('de');
+    });
+
+    it('lowercases the resolved value', async () => {
+      expect(await country('country=SG')).to.equal('sg');
+    });
+  });
+
+  describe('getLingoRegion', () => {
+    let lingoModule;
+
+    const lingoRegionConfig = {
+      locales: {
+        '': { ietf: 'en-US', tk: 'hah7vzn.css' },
+        de: { ietf: 'de-DE', tk: 'hah7vzn.css' },
+        ch_de: { ietf: 'de-CH', tk: 'hah7vzn.css', base: 'de' },
+        fr: { ietf: 'fr-FR', tk: 'hah7vzn.css' },
+        ch_fr: { ietf: 'fr-CH', tk: 'hah7vzn.css', base: 'fr' },
+      },
+      pathname: '/de/creativecloud/',
+      codeRoot: '/libs',
+    };
+
+    beforeEach(async () => {
+      document.querySelector('meta[name="langfirst"]')?.remove();
+      sessionStorage.removeItem('akamai');
+      sessionStorage.removeItem('international');
+      document.cookie = 'country=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      document.cookie = 'international=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      const timestamp = Date.now();
+      lingoModule = await import(`../../libs/utils/utils.js?t=${timestamp}`);
+    });
+
+    afterEach(() => {
+      const meta = document.querySelector('meta[name="langfirst"]');
+      if (meta) meta.remove();
+      sessionStorage.removeItem('akamai');
+      sessionStorage.removeItem('international');
+      document.cookie = 'country=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      document.cookie = 'international=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    });
+
+    it('returns null when lingo is not active', async () => {
+      lingoModule.setConfig(lingoRegionConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      const region = await lingoModule.getLingoRegion();
+      expect(region).to.be.null;
+    });
+
+    it('returns matching region when lingo is active and country matches', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      const region = await lingoModule.getLingoRegion();
+      expect(region).to.not.be.null;
+      expect(region.ietf).to.equal('de-CH');
+      expect(region.prefix).to.equal('/ch_de');
+    });
+
+    it('with useGeoLocation uses geo, not the market cookie, to pick the region', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      // User previously selected the FR market, but is physically in CH.
+      document.cookie = 'country=fr; path=/';
+      sessionStorage.setItem('akamai', 'ch');
+      const region = await lingoModule.getLingoRegion({ useGeoLocation: true });
+      expect(region).to.not.be.null;
+      expect(region.prefix).to.equal('/ch_de');
+    });
+
+    it('with useGeoLocation ignores the international cookie and resolves from geo', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      // The `international` cookie is no longer consulted; geo (US, no region) wins.
+      document.cookie = 'international=ch_de; path=/';
+      sessionStorage.setItem('akamai', 'us');
+      const region = await lingoModule.getLingoRegion({ useGeoLocation: true });
+      expect(region).to.be.null;
+    });
+
+    it('with useGeoLocation, geo picks the region even when the international cookie diverges', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      // `international=us` is ignored; geo (CH) resolves to ch_de.
+      document.cookie = 'international=us; path=/';
+      sessionStorage.setItem('akamai', 'ch');
+      const region = await lingoModule.getLingoRegion({ useGeoLocation: true });
+      expect(region).to.not.be.null;
+      expect(region.prefix).to.equal('/ch_de');
+    });
+
+    it('by default honors the market cookie over geo (mep/content callers)', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      // User selected the CH market but is physically in the US.
+      document.cookie = 'country=ch; path=/';
+      sessionStorage.setItem('akamai', 'us');
+      const region = await lingoModule.getLingoRegion();
+      expect(region).to.not.be.null;
+      expect(region.prefix).to.equal('/ch_de');
+    });
+
+    it('returns null when country has no matching region', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      sessionStorage.setItem('akamai', 'us');
+      const region = await lingoModule.getLingoRegion();
+      expect(region).to.be.null;
+    });
+
+    it('returns null when no country is available', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(lingoRegionConfig);
+      const originalFetch = window.fetch;
+      window.fetch = sinon.stub().rejects(new Error('network error'));
+      const region = await lingoModule.getLingoRegion();
+      window.fetch = originalFetch;
+      expect(region).to.be.null;
+    });
+  });
+
+  describe('loadIms with Lingo locale', () => {
+    let lingoModule;
+    let originalAdobeId;
+
+    const imsLingoConfig = {
+      locales: {
+        '': { ietf: 'en-US', tk: 'hah7vzn.css' },
+        fr: { ietf: 'fr-FR', tk: 'hah7vzn.css' },
+        ca_fr: { ietf: 'fr-CA', tk: 'hah7vzn.css', base: 'fr' },
+        ch_fr: { ietf: 'fr-CH', tk: 'hah7vzn.css', base: 'fr' },
+      },
+      pathname: '/fr/creativecloud/',
+      codeRoot: '/libs',
+      imsClientId: 'test-client-id',
+    };
+
+    beforeEach(async () => {
+      document.querySelector('meta[name="langfirst"]')?.remove();
+      sessionStorage.removeItem('akamai');
+      sessionStorage.removeItem('international');
+      document.cookie = 'country=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      document.cookie = 'international=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      originalAdobeId = window.adobeid;
+      const timestamp = Date.now();
+      lingoModule = await import(`../../libs/utils/utils.js?t=${timestamp}`);
+    });
+
+    afterEach(() => {
+      const langMeta = document.querySelector('meta[name="langfirst"]');
+      if (langMeta) langMeta.remove();
+      const ahomeMeta = document.querySelector('meta[name="adobe-home-redirect"]');
+      if (ahomeMeta) ahomeMeta.remove();
+      sessionStorage.removeItem('akamai');
+      sessionStorage.removeItem('international');
+      document.cookie = 'country=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      document.cookie = 'international=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      window.adobeid = originalAdobeId;
+    });
+
+    it('uses region IETF for IMS locale when lingo is active', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      lingoModule.setConfig(imsLingoConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.locale).to.equal('fr_CH');
+    });
+
+    it('uses default locale when lingo is not active', async () => {
+      lingoModule.setConfig(imsLingoConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.locale).to.equal('fr_FR');
+    });
+
+    it('builds Adobe Home redirect_uri with region acomLocale when lingo is active', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig(imsLingoConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/home?acomLocale=ch_fr');
+    });
+
+    it('builds Adobe Home redirect_uri with locale-prefix acomLocale when lingo is not active', async () => {
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig(imsLingoConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/home?acomLocale=fr');
+    });
+
+    it('keeps cn and sea on their locale homepage instead of /home for Adobe Home redirect_uri', async () => {
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig({ ...imsLingoConfig, pathname: '/cn/', locales: { '': { ietf: 'en-US' }, cn: { ietf: 'zh-CN' } } });
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/cn');
+    });
+
+    it('keeps sea on its locale homepage instead of /home for Adobe Home redirect_uri', async () => {
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig({ ...imsLingoConfig, pathname: '/sea/', locales: { '': { ietf: 'en-US' }, sea: { ietf: 'en-US' } } });
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/sea');
+    });
+
+    // AC#2: signing in from /fr with a Canadian IP lands on Adobe Home as ca_fr.
+    it('builds ca_fr Adobe Home redirect_uri for a Canadian user on the base /fr page', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig(imsLingoConfig);
+      sessionStorage.setItem('akamai', 'ca');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/home?acomLocale=ca_fr');
+    });
+
+    // Sign-in uses geo (akamai 'ca'), not the selected-market cookie (country=fr),
+    // so a Canadian who previously picked the FR market still lands on ca_fr.
+    it('uses geo over a divergent market cookie for the Adobe Home redirect_uri', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig(imsLingoConfig);
+      document.cookie = 'country=fr; path=/';
+      sessionStorage.setItem('akamai', 'ca');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/home?acomLocale=ca_fr');
+    });
+
+    // The international cookie is no longer consulted; geo picks the region.
+    it('ignores the international cookie and uses geo for the Adobe Home redirect_uri', async () => {
+      const lingoMeta = document.createElement('meta');
+      lingoMeta.setAttribute('name', 'langfirst');
+      lingoMeta.setAttribute('content', 'on');
+      document.head.append(lingoMeta);
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig(imsLingoConfig);
+      // international=ca_fr is ignored; geo (CH) resolves to ch_fr.
+      document.cookie = 'international=ca_fr; path=/';
+      sessionStorage.setItem('akamai', 'ch');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/home?acomLocale=ch_fr');
+    });
+
+    it('builds a bare /home redirect_uri (no acomLocale) on the root locale', async () => {
+      const ahomeMeta = document.createElement('meta');
+      ahomeMeta.setAttribute('name', 'adobe-home-redirect');
+      ahomeMeta.setAttribute('content', 'on');
+      document.head.append(ahomeMeta);
+      lingoModule.setConfig({ ...imsLingoConfig, pathname: '/' });
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal('https://www.stage.adobe.com/home');
+    });
+
+    // AC#3 guard: pages without adobe-home-redirect must not get a /home redirect_uri.
+    it('leaves redirect_uri undefined when adobe-home-redirect is not on', async () => {
+      lingoModule.setConfig(imsLingoConfig);
+      sessionStorage.setItem('akamai', 'ch');
+      lingoModule.loadIms().catch(() => {});
+      await new Promise((resolve) => { setTimeout(resolve, 100); });
+      expect(window.adobeid.redirect_uri).to.equal(undefined);
+    });
+  });
+
+  describe('getCountry bot detection', () => {
+    const originalUserAgent = navigator.userAgent;
+    let savedFetch;
+
+    beforeEach(() => {
+      savedFetch = window.fetch;
+      sessionStorage.removeItem('akamai');
+    });
+
+    afterEach(() => {
+      Object.defineProperty(navigator, 'userAgent', { value: originalUserAgent, writable: true });
+      window.fetch = savedFetch;
+      sessionStorage.removeItem('akamai');
+    });
+
+    it('should return null for bot user-agents without fetching geo', async () => {
+      const fetchSpy = sinon.spy();
+      window.fetch = fetchSpy;
+      Object.defineProperty(navigator, 'userAgent', { value: 'Googlebot/2.1', writable: true });
+      const result = await utils.getCountry();
+      expect(result).to.be.null;
+      expect(fetchSpy.called).to.be.false;
+    });
+
+    it('should return null for bots even when akamaiLocale param is set', async () => {
+      Object.defineProperty(navigator, 'userAgent', { value: 'Tokowaka-AI/1.0', writable: true });
+      const result = await utils.getCountry();
+      expect(result).to.be.null;
+    });
+
+    it('should return null for bots even when sessionStorage akamai is set', async () => {
+      Object.defineProperty(navigator, 'userAgent', { value: 'ClaudeBot/1.0', writable: true });
+      sessionStorage.setItem('akamai', 'fr');
+      const result = await utils.getCountry();
+      expect(result).to.be.null;
+    });
+  });
+
+  describe('resolveDetectedMarketCountry bot detection', () => {
+    const originalUserAgent = navigator.userAgent;
+
+    beforeEach(() => {
+      sessionStorage.removeItem('akamai');
+      document.cookie = 'country=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    });
+
+    afterEach(() => {
+      Object.defineProperty(navigator, 'userAgent', { value: originalUserAgent, writable: true });
+      sessionStorage.removeItem('akamai');
+      document.cookie = 'country=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    });
+
+    it('should return null for bots regardless of country cookie', async () => {
+      Object.defineProperty(navigator, 'userAgent', { value: 'Tokowaka-AI/1.0', writable: true });
+      document.cookie = 'country=ch; path=/';
+      const result = await utils.resolveDetectedMarketCountry();
+      expect(result).to.be.null;
+    });
+
+    it('should return null for bots regardless of sessionStorage akamai', async () => {
+      Object.defineProperty(navigator, 'userAgent', { value: 'GPTBot/1.0', writable: true });
+      sessionStorage.setItem('akamai', 'ch');
+      const result = await utils.resolveDetectedMarketCountry();
+      expect(result).to.be.null;
     });
   });
 });

@@ -4,6 +4,7 @@ import sinon from 'sinon';
 import { delay } from '../../helpers/waitfor.js';
 import init from '../../../libs/blocks/merch-card-collection-autoblock/merch-card-collection-autoblock.js';
 import { setConfig } from '../../../libs/utils/utils.js';
+import { mepMasStudioUrls } from '../../../libs/blocks/merch/mas-mep-utils.js';
 
 const locales = { '': { ietf: 'en-US', tk: 'hah7vzn.css' } };
 const conf = { locales, miloLibs: '/libs' };
@@ -15,11 +16,14 @@ describe('merch-card-collection autoblock', () => {
   describe('init method', () => {
     // Create mock mas-commerce-service element
     const mockService = document.createElement('mas-commerce-service');
-    mockService.readyPromise = Promise.resolve();
     document.head.appendChild(mockService);
     before(async () => {
       sinon.stub(window, 'fetch').callsFake(async (url) => {
-        const result = await originalFetch('/test/blocks/merch-card-collection-autoblock/mocks/fragment.json').then(async (res) => {
+        let mockPath = '/test/blocks/merch-card-collection-autoblock/mocks/fragment.json';
+        if (url.includes('with-checkbox-groups')) {
+          mockPath = '/test/blocks/merch-card-collection-autoblock/mocks/fragment-with-checkbox-groups.json';
+        }
+        const result = await originalFetch(mockPath).then(async (res) => {
           if (url.includes('id=1234')) {
             const responseBody = JSON.stringify(await res.json()).replaceAll('049231fd-0c45-4ef5-8792-7fa2dcd5005a', '4567');
             return new Response(responseBody, { status: 200 });
@@ -56,7 +60,30 @@ describe('merch-card-collection autoblock', () => {
       expect(collection.className).to.include('plans');
     });
 
-    it('creates creates sidenav by default', async () => {
+    it('replaces only the link paragraph when there are other paragraphs in content', async () => {
+      const content = document.createElement('div');
+      content.classList.add('content');
+      const intro = document.createElement('p');
+      intro.textContent = 'Intro paragraph';
+      const linkParagraph = document.createElement('p');
+      const a = document.createElement('a');
+      a.setAttribute('href', 'https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom&query=e58f8f75-b882-409a-9ff8-8826b36a8368');
+      a.textContent = 'merch-card-collection: SANDBOX / Individual Plans';
+      linkParagraph.append(a);
+      const outro = document.createElement('p');
+      outro.textContent = 'Outro paragraph';
+      content.append(intro, linkParagraph, outro);
+      document.body.append(content);
+
+      await init(a);
+
+      const children = [...content.children];
+      expect(children[0]).to.equal(intro);
+      expect(children[1].classList.contains('collection-container')).to.be.true;
+      expect(children[2]).to.equal(outro);
+    });
+
+    it('creates sidenav by default', async () => {
       const content = document.createElement('div');
       content.classList.add('content');
       const a = document.createElement('a');
@@ -69,6 +96,11 @@ describe('merch-card-collection autoblock', () => {
       expect(collection).to.exist;
       const sidenav = document.querySelector('merch-sidenav');
       expect(sidenav).to.exist;
+      const sidenavList = sidenav.querySelector('merch-sidenav-list>sp-sidenav');
+      expect(sidenavList.querySelectorAll('sp-sidenav-item').length).to.equal(4);
+      expect(sidenavList.querySelector('sp-sidenav-item[label=All]')).to.exist;
+      expect(sidenavList.querySelector('sp-sidenav-item[label=Cloud]')).to.exist;
+      expect(sidenavList.querySelector('sp-sidenav-item[label=Photo]')).to.exist;
     });
 
     it('test analytics', async () => {
@@ -232,6 +264,117 @@ describe('merch-card-collection autoblock', () => {
 
       window.history.pushState = originalPushState;
       window.history.pushState({}, '', `${originalUrl}`);
+    });
+
+    it('creates checkbox groups when fragment includes checkboxGroups data', async () => {
+      const content = document.createElement('div');
+      content.classList.add('content');
+      const a = document.createElement('a');
+      a.setAttribute('href', 'https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom&query=with-checkbox-groups');
+      a.textContent = 'merch-card-collection: SANDBOX / Catalog Plans';
+      content.append(a);
+      document.body.append(content);
+      await init(a);
+      await delay(100);
+      const sidenav = document.querySelector('merch-sidenav');
+      expect(sidenav).to.exist;
+      const checkboxGroups = sidenav.querySelectorAll('merch-sidenav-checkbox-group');
+      expect(checkboxGroups.length).to.equal(1);
+      const checkboxGroup = checkboxGroups[0];
+      expect(checkboxGroup.getAttribute('sidenavCheckboxTitle')).to.equal('Types');
+      expect(checkboxGroup.getAttribute('label')).to.equal('types');
+      expect(checkboxGroup.getAttribute('deeplink')).to.equal('types');
+      const checkboxes = checkboxGroup.querySelectorAll('sp-checkbox');
+      expect(checkboxes.length).to.equal(3);
+      expect(checkboxes[0].getAttribute('name')).to.equal('desktop');
+      expect(checkboxes[0].textContent).to.equal('Desktop');
+      expect(checkboxes[1].getAttribute('name')).to.equal('mobile');
+      expect(checkboxes[1].textContent).to.equal('Mobile');
+      expect(checkboxes[2].getAttribute('name')).to.equal('web');
+      expect(checkboxes[2].textContent).to.equal('Web');
+    });
+
+    it('does not create checkbox groups when fragment has no checkboxGroups data', async () => {
+      const content = document.createElement('div');
+      content.classList.add('content');
+      const a = document.createElement('a');
+      a.setAttribute('href', 'https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom&query=e58f8f75-b882-409a-9ff8-8826b36a8368');
+      a.textContent = 'merch-card-collection: SANDBOX / Individual Plans';
+      content.append(a);
+      document.body.append(content);
+      await init(a);
+      await delay(100);
+      const sidenav = document.querySelector('merch-sidenav');
+      expect(sidenav).to.exist;
+      const checkboxGroups = sidenav.querySelectorAll('merch-sidenav-checkbox-group');
+      expect(checkboxGroups.length).to.equal(0);
+    });
+
+    it('places checkbox groups after filter list in sidenav', async () => {
+      const content = document.createElement('div');
+      content.classList.add('content');
+      const a = document.createElement('a');
+      a.setAttribute('href', 'https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom&query=with-checkbox-groups');
+      a.textContent = 'merch-card-collection: SANDBOX / Catalog Plans';
+      content.append(a);
+      document.body.append(content);
+      await init(a);
+      await delay(100);
+      const sidenav = document.querySelector('merch-sidenav');
+      const sidenavList = sidenav.querySelector('merch-sidenav-list');
+      const checkboxGroup = sidenav.querySelector('merch-sidenav-checkbox-group');
+      expect(sidenavList).to.exist;
+      expect(checkboxGroup).to.exist;
+      // Check that checkbox group comes after sidenav list
+      const sidenavChildren = Array.from(sidenav.children);
+      const listIndex = sidenavChildren.indexOf(sidenavList);
+      const checkboxIndex = sidenavChildren.indexOf(checkboxGroup);
+      expect(checkboxIndex).to.be.greaterThan(listIndex);
+    });
+  });
+
+  describe('MEP Highlight M@S Content markers', () => {
+    beforeEach(() => { document.body.innerHTML = ''; });
+    afterEach(() => { document.body.innerHTML = ''; });
+
+    it('createCollection stamps data-mas-block=collection on the container and captures original href in mepMasStudioUrls when mep.preview is on', async () => {
+      setConfig({ ...conf, mep: { preview: true } });
+      const studioHref = 'https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom&query=e58f8f75-b882-409a-9ff8-8826b36a8368';
+      const wrap = document.createElement('div');
+      wrap.classList.add('content');
+      wrap.id = 'mep-collection-test-wrap';
+      const a = document.createElement('a');
+      a.setAttribute('href', studioHref);
+      a.textContent = 'merch-card-collection: SANDBOX / Individual Plans';
+      wrap.append(a);
+      document.body.append(wrap);
+      await init(a);
+      const container = wrap.querySelector('.collection-container');
+      expect(container, 'collection container should be created inside the test wrap').to.exist;
+      expect(container.dataset.masBlock).to.equal('collection');
+      expect(mepMasStudioUrls.get(container)).to.equal(studioHref);
+    });
+
+    it('createCollection does NOT stamp or capture href when mep.preview is off', async () => {
+      // The MEP block is gated atomically — both stamps absent means the
+      // dynamic import + attachAemLoadListener were skipped too. (We can't
+      // spy aem:load directly: M@S's <merch-card> attaches its own internal
+      // listener via handleAemFragmentEvents.)
+      setConfig({ ...conf, mep: { preview: false } });
+      const studioHref = 'https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom&query=e58f8f75-b882-409a-9ff8-8826b36a8368';
+      const wrap = document.createElement('div');
+      wrap.classList.add('content');
+      wrap.id = 'mep-collection-test-wrap-off';
+      const a = document.createElement('a');
+      a.setAttribute('href', studioHref);
+      a.textContent = 'merch-card-collection: SANDBOX / Individual Plans';
+      wrap.append(a);
+      document.body.append(wrap);
+      await init(a);
+      const container = wrap.querySelector('.collection-container');
+      expect(container, 'collection container should be created inside the test wrap').to.exist;
+      expect(container.dataset.masBlock).to.equal(undefined);
+      expect(mepMasStudioUrls.get(container)).to.equal(undefined);
     });
   });
 });

@@ -49,16 +49,59 @@ const sticky = () => {
   };
 };
 
-const getAemUrl = (url) => url.hostname.split('.')[0].split('--');
-const isValidUrl = (str) => {
+const AEM_PAGE_HOST_REGEX = /^([^.]+\.)*[^.]+\.aem\.(?:page|live)$/;
+const getAemUrl = (url) => {
+  const segment = url.hostname.split('.').find((s) => s.includes('--'));
+  return segment ? segment.split('--') : [];
+};
+const getInvalidUrlReason = (str) => {
+  const trimmed = typeof str === 'string' ? str.trim() : '';
+  const preParse = [
+    [!trimmed.startsWith('https://'), 'Invalid URL (must start with https://)'],
+    [trimmed.length > 8 && trimmed[8] === '/', 'Invalid URL (use exactly two slashes after https:)'],
+  ];
+  const preFail = preParse.find(([fail]) => fail);
+  if (preFail) return preFail[1];
+
   let url;
   try {
     url = new URL(str);
   } catch (_) {
-    return false;
+    return 'Invalid URL';
   }
+
   const [ref, repo, owner] = getAemUrl(url);
-  return url.protocol === 'https:' && ref && repo && owner;
+  const tld = url.hostname.endsWith('.aem.live') ? 'aem.live' : 'aem.page';
+  const postParse = [
+    [url.protocol !== 'https:', 'Must use HTTPS'],
+    [!url.hostname, 'Invalid URL (missing hostname)'],
+    [!url.hostname || !AEM_PAGE_HOST_REGEX.test(url.hostname), 'Invalid host (expected *.aem.page or *.aem.live)'],
+    [!ref || !repo || !owner, 'Invalid host (missing ref, repo, or owner)'],
+    [/^([^-]+)(?:-.+)-\1$/.test(repo ?? ''), 'Invalid host (repo name has a duplicated segment, e.g. da-bacom-da should be da-bacom)'],
+    [ref && repo && owner && !url.hostname.endsWith(`${ref}--${repo}--${owner}.${tld}`), 'Invalid host format (expected ref--repo--owner.aem.page or .aem.live)'],
+    [repo === 'bacom', 'Old Bacom project is not supported, use new DA project instead'],
+    [url.pathname.includes('//'), 'Invalid URL (path must not contain //)'],
+    [url.pathname.toLowerCase().endsWith('.html'), 'URL must not end with .html'],
+  ];
+  const postFail = postParse.find(([fail]) => fail);
+  return postFail ? postFail[1] : null;
+};
+
+const isValidUrl = (str) => !getInvalidUrlReason(str);
+
+const getMixedProjectError = (urls) => {
+  if (urls.length < 2) return null;
+  const projects = new Set();
+  urls.forEach((str) => {
+    if (!isValidUrl(str)) return;
+    const seg = str.split('/')[2]?.replace(/[\u2013\u2014]/g, '--').split('.').find((s) => s.includes('--'));
+    const [, repo, owner] = seg?.split('--') ?? [];
+    if (repo && owner) projects.add(`${repo}--${owner}`);
+  });
+  if (projects.size > 1) {
+    return `All URLs must belong to the same project. Found multiple projects: ${[...projects].join(', ')}`;
+  }
+  return null;
 };
 
 const editEntry = (el, str) => {
@@ -216,6 +259,8 @@ export {
   getStatusProps,
   updateJobUrls,
   sticky,
+  getInvalidUrlReason,
+  getMixedProjectError,
   isValidUrl,
   delay,
   setJobTime,

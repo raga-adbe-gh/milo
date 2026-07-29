@@ -21,6 +21,13 @@ import {
   setAriaAtributes,
 } from '../utilities.js';
 
+let merch;
+try {
+  merch = await import('../../../merch/merch.js');
+} catch (e) {
+  merch = { default: async (elem) => elem };
+}
+
 function getAnalyticsValue(str, index) {
   if (typeof str !== 'string' || !str.length) return str;
 
@@ -31,11 +38,7 @@ function getAnalyticsValue(str, index) {
 }
 
 function decorateCta({ elem, type = 'primaryCta', index } = {}) {
-  if (shouldBlockFreeTrialLinks({
-    button: elem,
-    localePrefix: getConfig()?.locale?.prefix,
-    parent: elem.parentElement,
-  })) return null;
+  if (shouldBlockFreeTrialLinks(elem)) return null;
   const modifier = type === 'secondaryCta' ? 'secondary' : 'primary';
 
   const clone = elem.cloneNode(true);
@@ -103,22 +106,8 @@ const decorateHeadline = (elem, index, context = 'viewport') => {
   return headline;
 };
 
-const decorateLinkGroup = (elem, index) => {
-  if (!(elem instanceof HTMLElement) || !elem.querySelector('a')) return '';
-
-  // TODO: allow links with image and no label
-  const image = elem.querySelector('picture');
-  const link = elem.querySelector('a');
-  const description = elem.querySelector('p:nth-child(2)');
-  const modifierClasses = [...elem.classList]
-    .filter((className) => className !== 'link-group')
-    .map((className) => `feds-navLink--${className}`);
-  const imageElem = image ? toFragment`<div class="feds-navLink-image">${image}</div>` : '';
-  const descriptionElem = description ? toFragment`<div class="feds-navLink-description">${description.textContent}</div>` : '';
-  const contentElem = link ? toFragment`<div class="feds-navLink-content">
-      <div class="feds-navLink-title">${link.textContent}</div>
-      ${descriptionElem}
-    </div>` : '';
+/** Mega-menu link-group shell: `feds-navLink` anchor, or `feds-navLink--header` as a div. */
+function buildFedsLinkGroupShell(link, modifierClasses, imageElem, contentElem, index) {
   let linkGroup = toFragment`<a
     href="${link.href}"
     class="feds-navLink${modifierClasses.length ? ` ${modifierClasses.join(' ')}` : ''}"
@@ -137,17 +126,92 @@ const decorateLinkGroup = (elem, index) => {
       </div>`;
   }
   if (link?.target) linkGroup.target = link.target;
-
   return linkGroup;
+}
+
+const decorateLinkGroup = (elem, index) => {
+  if (!(elem instanceof HTMLElement) || !elem.querySelector('a')) return '';
+
+  // TODO: allow links with image and no label
+  const image = elem.querySelector('picture');
+  const link = elem.querySelector('a');
+  const description = elem.querySelector('p:nth-child(2)');
+  const modifierClasses = [...elem.classList]
+    .filter((className) => className !== 'link-group')
+    .map((className) => `feds-navLink--${className}`);
+  const imageElem = image ? toFragment`<div class="feds-navLink-image">${image}</div>` : '';
+  const descriptionElem = description ? toFragment`<div class="feds-navLink-description">${description.textContent}</div>` : '';
+  const contentElem = link ? toFragment`<div class="feds-navLink-content">
+      <div class="feds-navLink-title">${link.textContent}</div>
+      ${descriptionElem}
+    </div>` : '';
+
+  return buildFedsLinkGroupShell(link, modifierClasses, imageElem, contentElem, index);
 };
 
-const decorateElements = ({ elem, className = 'feds-navLink', itemIndex = { position: 0 } } = {}) => {
-  const decorateLink = (link) => {
+/**
+ * Link-groups authored with a primary column title link plus a Milo OST price in the second line
+ * (e.g. heading link first, `a.merch` in paragraph two) need the live price injected into the
+ * description; decorateLinkGroup only reads `querySelector('a')` (first anchor) for merch.
+ */
+const decorateLinkGroupWithEmbeddedMerch = (elem, index, priceEl) => {
+  if (!(elem instanceof HTMLElement) || !elem.querySelector('a')) return '';
+
+  const image = elem.querySelector('picture');
+  const primaryLink = elem.querySelector('a:not(.merch)') || elem.querySelector('a');
+  const description = elem.querySelector('p:nth-child(2)');
+  const modifierClasses = [...elem.classList]
+    .filter((className) => className !== 'link-group')
+    .map((className) => `feds-navLink--${className}`);
+  const imageElem = image ? toFragment`<div class="feds-navLink-image">${image}</div>` : '';
+
+  let descriptionFrag = '';
+  if (description && priceEl) {
+    const descClone = description.cloneNode(true);
+    const merchInClone = descClone.querySelector('a.merch');
+    if (merchInClone) {
+      merchInClone.replaceWith(priceEl);
+    }
+    const descWrapper = document.createElement('div');
+    descWrapper.className = 'feds-navLink-description';
+    descWrapper.append(...descClone.childNodes);
+    descriptionFrag = descWrapper;
+  } else if (description) {
+    descriptionFrag = toFragment`<div class="feds-navLink-description">${description.textContent}</div>`;
+  }
+
+  const contentElem = primaryLink ? toFragment`<div class="feds-navLink-content">
+      <div class="feds-navLink-title">${primaryLink.textContent}</div>
+      ${descriptionFrag}
+    </div>` : '';
+
+  return buildFedsLinkGroupShell(primaryLink, modifierClasses, imageElem, contentElem, index);
+};
+
+const decorateElements = async ({ elem, className = 'feds-navLink', itemIndex = { position: 0 } } = {}) => {
+  const decorateLink = async (link) => {
+    if (shouldBlockFreeTrialLinks(link)) return null;
     // Increase analytics index every time a link is decorated
     itemIndex.position += 1;
 
     // Decorate link group
     if (link.matches('.link-group')) {
+      const merchAnchor = link.querySelector('a.merch');
+      if (merchAnchor) {
+        const clonedElement = merchAnchor.cloneNode(true);
+        const merchElement = await merch.default(clonedElement);
+        const primaryAnchor = link.querySelector('a:not(.merch)');
+        if (merchElement && primaryAnchor && merchAnchor !== primaryAnchor) {
+          return decorateLinkGroupWithEmbeddedMerch(link, itemIndex.position, merchElement);
+        }
+        if (merchElement) {
+          const decoratedElement = decorateLinkGroup(link, itemIndex.position);
+          merchElement.classList.value = decoratedElement.classList.value;
+          merchElement.innerHTML = decoratedElement.innerHTML;
+          merchElement.setAttribute('daa-ll', decoratedElement.getAttribute('daa-ll'));
+          return merchElement;
+        }
+      }
       return decorateLinkGroup(link, itemIndex.position);
     }
 
@@ -156,11 +220,21 @@ const decorateElements = ({ elem, className = 'feds-navLink', itemIndex = { posi
       const type = link.parentElement.tagName === 'EM' ? 'secondaryCta' : 'primaryCta';
       // Remove its 'em' or 'strong' wrapper
       link.parentElement.replaceWith(link);
-
-      return decorateCta({ elem: link, type, index: itemIndex.position });
+      const clonedLink = link.cloneNode(true);
+      const processedLink = link.classList.contains('merch') ? await merch.default(clonedLink) : link;
+      const decoratedLink = decorateCta({ elem: processedLink, type, index: itemIndex.position });
+      return decoratedLink;
     }
 
     // Simple links get analytics attributes and appropriate class name
+    if (link.classList.contains('merch')) {
+      const clonedLink = link.cloneNode(true);
+      const merchLink = await merch.default(clonedLink);
+      merchLink.setAttribute('daa-ll', getAnalyticsValue(link.textContent, itemIndex.position));
+      merchLink.classList.value = className;
+      return merchLink;
+    }
+
     link.setAttribute('daa-ll', getAnalyticsValue(link.textContent, itemIndex.position));
     link.classList.add(className);
 
@@ -171,14 +245,14 @@ const decorateElements = ({ elem, className = 'feds-navLink', itemIndex = { posi
 
   // If the element is a link, decorate it and return it directly
   if (elem.matches(linkSelector)) {
-    return toFragment`<li>${decorateLink(elem)}</li>`;
+    return toFragment`<li>${await decorateLink(elem)}</li>`;
   }
 
   // Otherwise, this might be a collection of elements;
   // decorate all links in the collection and return it
-  elem.querySelectorAll(linkSelector).forEach((link) => {
-    link.replaceWith(decorateLink(link));
-  });
+  for (const link of elem.querySelectorAll(linkSelector)) {
+    link.replaceWith(await decorateLink(link));
+  }
 
   return elem;
 };
@@ -195,7 +269,7 @@ const decorateGnavImage = (elem) => {
 };
 
 // Current limitation: we can only add one link
-const decoratePromo = (elem, index) => {
+const decoratePromo = async (elem, index) => {
   const isDarkTheme = elem.matches('.dark');
   const isImageOnly = elem.matches('.image-only');
   const promoHeader = elem.querySelector('p > strong');
@@ -214,7 +288,7 @@ const decoratePromo = (elem, index) => {
     promoHeader.parentElement.replaceWith(headingElem);
   }
 
-  decorateElements({ elem, className: 'feds-promo-link', index });
+  await decorateElements({ elem, className: 'feds-promo-link', index });
 
   const decorateImage = () => {
     const linkElem = elem.querySelector('a');
@@ -222,7 +296,7 @@ const decoratePromo = (elem, index) => {
     let promoImageElem;
 
     if (linkElem instanceof HTMLElement) {
-      promoImageElem = toFragment`<a class="feds-promo-image" href="${linkElem.href}" daa-ll="promo-image">
+      promoImageElem = toFragment`<a class="feds-promo-image" href="${linkElem.href}" daa-ll="promo-image" aria-hidden="true" tabindex="-1">
           ${imageElem}
         </a>`;
     } else {
@@ -312,7 +386,6 @@ const decorateColumns = async ({ content, separatorTagName = 'H5', context } = {
 
         if (column.querySelector(selectors.columnBreak)) {
           wrapper.classList.add(`${wrapperClass}--group`);
-          if (column.querySelectorAll(selectors.columnBreak).length > 1) wrapper.classList.add(`${wrapperClass}--wide`);
 
           const wideColumn = document.createElement('div');
           wideColumn.append(...column.childNodes);
@@ -325,7 +398,7 @@ const decorateColumns = async ({ content, separatorTagName = 'H5', context } = {
         // Since the promo is alone on a column, reset the analytics index
         itemIndex.position = 0;
 
-        const promoElem = decoratePromo(columnElem, itemIndex);
+        const promoElem = await decoratePromo(columnElem, itemIndex);
 
         itemDestination.append(promoElem);
       } else if (columnElem.matches('.gnav-image')) {
@@ -335,7 +408,7 @@ const decorateColumns = async ({ content, separatorTagName = 'H5', context } = {
 
         itemDestination.append(imageElem);
       } else {
-        let decoratedElem = decorateElements({ elem: columnElem, itemIndex });
+        let decoratedElem = await decorateElements({ elem: columnElem, itemIndex });
         columnElem.remove();
 
         // If an items template has been previously created,
@@ -367,11 +440,11 @@ const decorateColumns = async ({ content, separatorTagName = 'H5', context } = {
   }
 };
 
-const decorateCrossCloudMenu = (content) => {
+const decorateCrossCloudMenu = async (content) => {
   const crossCloudMenuEl = content.querySelector('.cross-cloud-menu');
   if (!crossCloudMenuEl) return;
 
-  decorateElements({ elem: crossCloudMenuEl });
+  await decorateElements({ elem: crossCloudMenuEl });
   crossCloudMenuEl.className = 'feds-crossCloudMenu-wrapper';
   crossCloudMenuEl.querySelector('div').className = 'feds-crossCloudMenu';
   crossCloudMenuEl.querySelectorAll('ul li').forEach((el, index) => {
@@ -394,9 +467,22 @@ const decorateMenu = (config) => logErrorFor(async () => {
     const initialHeadingElem = itemTopParent.querySelector('h2');
     itemTopParent.removeChild(initialHeadingElem);
 
+    const merchLinks = itemTopParent.querySelectorAll('.merch');
+    if (merchLinks.length) {
+      for (const link of merchLinks) {
+        const linkContent = link.innerHTML;
+        const merchBlock = await merch.default(link);
+        if (merchBlock) {
+          merchBlock.classList.remove('con-button');
+          merchBlock.innerHTML = linkContent;
+          link.replaceWith(merchBlock);
+        }
+      }
+    }
+
     menuTemplate = toFragment`<div class="feds-popup">
-        ${itemTopParent}
-      </div>`;
+    ${itemTopParent}
+    </div>`;
 
     await decorateColumns({ content: menuTemplate });
   }
@@ -417,7 +503,7 @@ const decorateMenu = (config) => logErrorFor(async () => {
       </div>`;
     addMepHighlightAndTargetId(menuTemplate, content);
 
-    decorateCrossCloudMenu(menuTemplate);
+    await decorateCrossCloudMenu(menuTemplate);
 
     await decorateColumns({ content: menuContent });
 
@@ -467,4 +553,5 @@ const decorateMenu = (config) => logErrorFor(async () => {
   }
 }, 'Decorate menu failed', 'gnav-menu', 'i');
 
+export { decorateLinkGroupWithEmbeddedMerch };
 export default { decorateMenu, decorateLinkGroup, decorateHeadline };

@@ -19,6 +19,12 @@ const SYNTHETIC_BLOCKS = [
   'social',
   'product-entry-cta',
   'gnav-image',
+  'gnav-dropdown-metadata',
+  'featured-card',
+  'product-card',
+  'links-card',
+  'promo-card',
+  'promo-card-small',
 ];
 
 // eslint-disable-next-line import/prefer-default-export

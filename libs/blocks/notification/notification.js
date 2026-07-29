@@ -93,7 +93,7 @@ function wrapCopy(foreground) {
   const texts = foreground.querySelectorAll('.text');
   if (!texts) return;
   texts.forEach((text) => {
-    const heading = text?.querySelector('h1, h2, h3, h4, h5, h6, p:not(.icon-area, .action-area)');
+    const heading = text?.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > p:not(.icon-area, .action-area), :scope > mas-field');
     const icon = heading?.previousElementSibling;
     const body = heading?.nextElementSibling?.classList.contains('action-area') ? '' : heading?.nextElementSibling;
     const copy = createTag('div', { class: 'copy-wrap' }, [heading, body].filter(Boolean));
@@ -385,8 +385,11 @@ function setStickyAccessibilityAttributes(el) {
   if (!section) return;
 
   const checkAndSetAttributes = () => {
-    const sticky = section.classList.contains('sticky-top') || section.classList.contains('sticky-bottom');
-    if (!sticky) return false;
+    const isSticky = section.classList.contains('sticky-top') || section.classList.contains('sticky-bottom');
+    if (!isSticky) return false;
+
+    el.classList.remove('no-closure');
+    if (!el.querySelector('.close')) decorateClose(el);
 
     el.setAttribute('aria-label', getHeadingText(el)
        || (section.classList.contains('sticky-bottom') ? 'Promotional Banner Bottom' : 'Promotional Banner Top'));

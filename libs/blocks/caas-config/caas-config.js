@@ -69,16 +69,38 @@ const defaultOptions = {
   },
   cardStyle: {
     '1:2': '1/2 Card',
-    '3:4': '3/4 Card',
     'half-height': '1/2 Height Card',
-    'full-card': 'Full Card',
+    '3:4': '3/4 Card',
+    'blade-card': 'Blade Card...',
+    'blog-card': 'Blog Card',
+    'button-card': 'Button Card',
+    'custom-card': 'Custom Card...',
     'double-wide': 'Double Width Card',
-    product: 'Product Card',
-    'text-card': 'Text Card',
+    'editorial-card': 'Editorial Card...',
+    'flex-card': 'Flex Card...',
+    'full-card': 'Full Card',
+    'horizontal-card': 'Horizontal Card',
     'icon-card': 'Icon Card',
     'news-card': 'News Card',
-    'custom-card': 'Custom Card',
-    'blade-card': 'Blade Card',
+    product: 'Product Card',
+    'text-card': 'Text Card',
+  },
+  flexCardImageOptions: {
+    default: 'Default',
+    hidden: 'Hidden',
+    'image-small-center': 'Small Center',
+    'image-small-left': 'Small Left',
+  },
+  flexCardTextAlign: {
+    default: 'Default',
+    'text-left': 'Left',
+    'text-center': 'Center',
+    'text-justify': 'Justify',
+    'text-right': 'Right',
+  },
+  flexCardTextSize: {
+    default: 'Default',
+    'text-large': 'Large',
   },
   collectionBtnStyle: {
     primary: 'Primary',
@@ -92,7 +114,7 @@ const defaultOptions = {
     '1600MaxWidth': '1600px Container',
     '83Percent': '83% Container',
     '32Margin': '32 Margin Container',
-    carousel: 'Carousel',
+    carousel: 'Carousel...',
     categories: 'Product Categories',
   },
   ctaActions: {
@@ -148,7 +170,6 @@ const defaultOptions = {
     OR: 'OR',
   },
   layoutType: {
-    // '1up': '1up',
     '2up': '2up',
     '3up': '3up',
     '4up': '4up',
@@ -159,8 +180,10 @@ const defaultOptions = {
     'over-background': 'Over Background',
   },
   paginationAnimationStyle: {
-    paged: 'Paged',
-    incremental: 'Incremental',
+    pagedModern: 'Modern (Paged)',
+    incrementalModern: 'Modern (Incremental)',
+    paged: 'Classic (Paged)',
+    incremental: 'Classic (Incremental)',
   },
   paginationType: {
     paginator: 'Paginator',
@@ -172,6 +195,7 @@ const defaultOptions = {
     'contentArea.detailText': 'Card Details',
     'overlays.label.description': 'Card Labels',
     'overlays.banner.description': 'Banner Descriptions',
+    'search.search': 'Search Terms',
   },
   sort: {
     featured: 'Featured',
@@ -182,14 +206,17 @@ const defaultOptions = {
     eventSort: 'Events: (Live, Upcoming, OnDemand)',
     titleAsc: 'Title: (A - Z)',
     titleDesc: 'Title: (Z - A)',
+    localFirst: 'Local Region First',
+    localLast: 'Local Region Last',
     random: 'Random',
   },
   source: {
     bacom: 'Bacom',
     doccloud: 'DocCloud',
+    edu: 'Edu',
     events: 'Events',
     experienceleague: 'Experience League',
-    hawks: 'Hawks',
+    hawks: 'Creative Cloud (Hawks)',
     magento: 'Magento',
     marketo: 'Marketo',
     milo: 'Milo',
@@ -197,6 +224,7 @@ const defaultOptions = {
     workfront: 'Workfront',
     'bacom-blog': 'Bacom Blog',
     news: 'Newsroom',
+    'adobe-blog': 'Adobe Blog',
   },
   tagsUrl: 'https://www.adobe.com/chimera-api/tags',
   titleHeadingLevel: {
@@ -214,9 +242,11 @@ const defaultOptions = {
   },
   detailsTextOption: {
     default: 'Default',
+    hidden: 'Hidden',
     createdDate: 'Created Date',
     modifiedDate: 'Modified Date',
     staticDate: 'Static Date',
+    productName: 'Product Name',
   },
   cardHoverEffect: {
     default: 'Default',
@@ -370,11 +400,53 @@ const BasicsPanel = ({ tagsData }) => {
 
 const UiPanel = () => {
   const { state } = useContext(ConfiguratorContext);
+
   const bladeCardOptions = html`
-    <div class="blade-card-options">
+    <div class="nested">
       <${Input} label="Reverse direction" prop="bladeCardReverse" class="blade-card-option" type="checkbox" />
       <${Input} label="Light text" prop="bladeCardLightText" class="blade-card-option" type="checkbox" />
       <${Input} label="Transparent background" prop="bladeCardTransparent" class="blade-card-option" type="checkbox" />
+    </div>
+  `;
+
+  const carouselOptions = html`
+    <div class="nested">
+      <${Select}
+        label="Carousel Controls Options"
+        prop="paginationAnimationStyle"
+        options=${defaultOptions.paginationAnimationStyle}
+      />
+      <${Input} label="Light (Modern only)" prop="useLightControls" type="checkbox" />
+    </div>
+  `;
+
+  const editorialCardOptions = html`
+    <div class="nested">
+      <${Input} label="Editorial Open variant" prop="editorialCardOpenVariant" type="checkbox" />
+    </div>
+  `;
+
+  const buttonStyleOptions = html`
+    <div class="nested">
+      <p class="note">Uses <i>URL2Text</i> for the button label</p>
+    </div>
+  `;
+
+  const flexCardOptions = html`
+    <div class="nested">
+      <${Select} label="Font Size" prop="flexCardTextSize" options=${defaultOptions.flexCardTextSize} />
+      <${Select} label="Image Options" prop="flexCardImageOptions" options=${defaultOptions.flexCardImageOptions} />
+      <${Select} label="Text Align" prop="flexCardTextAlign" options=${defaultOptions.flexCardTextAlign} />
+      <${Input} label="Hide Details Text" prop="flexCardHideDetails" type="checkbox" />
+      <${Input} label="Hide Title" prop="flexCardHideTitle" type="checkbox" />
+      <${Input} label="Hide Description" prop="flexCardHideDescription" type="checkbox" />
+      <${Input} label="Show Date on Footer" prop="flexCardShowDateOnFooter" type="checkbox" />
+    </div>
+  `;
+
+  const customCardOptions = html`
+    <div class="nested">
+      <${Input} label="Custom Card HTML" prop="customCard" type="text" />
     </div>
   `;
 
@@ -386,12 +458,19 @@ const UiPanel = () => {
     <${Input} label="Show Different CTA for Live Events" prop="dynamicCTAForLiveEvents" type="checkbox" />
     <${Input} label="Hide Date for On-Demand Content" prop="hideDateInterval" type="checkbox" />
     <${Input} label="Hide Card Banners" prop="disableBanners" type="checkbox" />
-    <${Input} label="Use Overlay Links" prop="useOverlayLinks" type="checkbox" />
+    <${Input} label="Use Center Video Play Button" prop="useCenterVideoPlay" type="checkbox" />
     <${Input} label="Use Light Text" prop="useLightText" type="checkbox" />
+    <${Input} label="Use Overlay Links" prop="useOverlayLinks" type="checkbox" />
+    <${Input} label="Use Rounded Corners [new]" prop="useRoundedCorners" type="checkbox" />
     <${Select} label="Card Style" prop="cardStyle" options=${defaultOptions.cardStyle} />
       ${state.cardStyle === 'blade-card' && bladeCardOptions}
+      ${state.cardStyle === 'button-card' && buttonStyleOptions}
+      ${state.cardStyle === 'editorial-card' && editorialCardOptions}
+      ${state.cardStyle === 'flex-card' && flexCardOptions}
+      ${state.cardStyle === 'custom-card' && customCardOptions}
     <${Select} options=${defaultOptions.cardTitleAccessibilityLevel} prop="cardTitleAccessibilityLevel" label="Card Accessibility Title Level" />
     <${Select} label="Layout" prop="container" options=${defaultOptions.container} />
+      ${state.container === 'carousel' && carouselOptions}
     <${Select} label="Layout Type" prop="layoutType" options=${defaultOptions.layoutType} />
     <${Select} label="Grid Gap (Gutter)" prop="gutter" options=${defaultOptions.gutter} />
     <${Select} label="Theme" prop="theme" options=${defaultOptions.theme} />
@@ -411,7 +490,6 @@ const UiPanel = () => {
       prop="loadMoreBtnStyle"
       options=${defaultOptions.loadMoreBtnStyle}
     />
-    <${Input} label="Custom Card HTML" prop="customCard" type="text" />
     <${Select}
       label="CTA Link Behavior"
       prop="ctaAction"
@@ -568,6 +646,8 @@ const SortPanel = () => {
       <${Input} label="Events" prop="sortEventSort" type="checkbox" />
       <${Input} label="Title A-Z" prop="sortTitleAsc" type="checkbox" />
       <${Input} label="Title Z-A" prop="sortTitleDesc" type="checkbox" />
+      <${Input} label="Local Region First" prop="sortLocalFirst" type="checkbox" />
+      <${Input} label="Local Region Last" prop="sortLocalLast" type="checkbox" />
       <${Input} label="Random" prop="sortRandom" type="checkbox" />
     </div>
 
@@ -575,10 +655,14 @@ const SortPanel = () => {
     ${state.sortEnableRandomSampling && RandomSampling}
   `;
 
+  const showRecencyThreshold = state.sortDefault === 'localFirst'
+    || (state.sortEnablePopup && state.sortLocalFirst);
+
   return html`
     <${Select} label="Default Sort Order" prop="sortDefault" options=${defaultOptions.sort} />
     <${Input} label="Enable Sort Popup" prop="sortEnablePopup" type="checkbox" />
     ${state.sortEnablePopup && SortOptions}
+    ${showRecencyThreshold && html`<${Input} label="Local Region Recency Threshold (months)" prop="sortLocalFirstRecencyThreshold" type="number" />`}
   `;
 };
 
@@ -601,7 +685,10 @@ const FilterPanel = ({ tagsData }) => {
     <${Select} label="Filter Location" prop="filterLocation" options=${defaultOptions.filterLocation} />
     <${Select} label="Filter logic within each tag panel" prop="filterLogic" options=${defaultOptions.filterLogic} />
     <${Select} label="Automatic or Custom Panel" prop="filterBuildPanel" options=${defaultOptions.filterBuildPanel} />
-  `;
+    <${Input} label="Categories mapping file (optional)" type="text" 
+      prop="categoriesMappingFile"
+      value=${context.state.categoriesMappingFile}/>
+    `;
 
   const FilterBuildPanel = html`
     <${FilterOptions}>
@@ -682,11 +769,6 @@ const PaginationPanel = () => {
       label="Pagination Type"
       prop="paginationType"
       options=${defaultOptions.paginationType}
-    />
-    <${Select}
-      label="Carousel Animation Style"
-      prop="paginationAnimationStyle"
-      options=${defaultOptions.paginationAnimationStyle}
     />
     <${Input} label="Use Theme 3" prop="paginationUseTheme3" type="checkbox" />
   `;

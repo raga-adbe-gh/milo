@@ -1,6 +1,8 @@
 import { expect } from '@esm-bundle/chai';
 import { stub } from 'sinon';
 import { setConfig } from '../../../libs/utils/utils.js';
+import { getLingoActive } from '../../../libs/utils/lingo-active.js';
+import caasTags from '../../../libs/blocks/caas-config/caas-tags.js';
 import {
   defaultState,
   getConfig,
@@ -10,7 +12,15 @@ import {
   getCountryAndLang,
   stageMapToCaasTransforms,
   getGrayboxExperienceId,
+  initBulkPublisherLingoMapping,
 } from '../../../libs/blocks/caas/utils.js';
+
+describe('utils.js export sanity', () => {
+  it('getLingoActive() is callable and returns a boolean', async () => {
+    const val = await getLingoActive();
+    expect(val).to.be.a('boolean');
+  });
+});
 
 const mockLocales = ['ar', 'br', 'ca', 'ca_fr', 'cl', 'co', 'la', 'mx', 'pe', '', 'africa', 'be_fr', 'be_en', 'be_nl',
   'cy_en', 'dk', 'de', 'ee', 'es', 'fr', 'gr_en', 'ie', 'il_en', 'it', 'lv', 'lt', 'lu_de', 'lu_en', 'lu_fr', 'hu',
@@ -172,7 +182,7 @@ describe('getConfig', () => {
         collectionButtonStyle: 'primary',
         resultsPerPage: 5,
         endpoint:
-          'https://www.adobe.com/chimera-api/collection/myTargetActivity.json?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=en&country=us&complexQuery=((%22caas%3Aproducts%2Findesign%22%2BAND%2B%22caas%3Aproducts%2Freader%22)%2BAND%2B(%22caas%3Acountry%2Fbr%22%2BOR%2B%22caas%3Acountry%2Fca%22))%2BAND%2B((%22caas%3Acontent-type%2Fvideo%22%2BAND%2B%22caas%3Acontent-type%2Fblog%22))&excludeIds=&currentEntityId=&featuredCards=c94ec235-50c2-595e-9fa8-0b4602c08712%2Ce9d71f5e-e7c9-5d6d-89e9-2ffdad17b8bd&environment=&draft=true&size=10&flatFile=false',
+          'https://www.adobe.com/chimera-api/collection/myTargetActivity.json?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=en&country=us&complexQuery=((%22caas%3Aproducts%2Findesign%22%2BAND%2B%22caas%3Aproducts%2Freader%22)%2BAND%2B(%22caas%3Acountry%2Fbr%22%2BOR%2B%22caas%3Acountry%2Fca%22))%2BAND%2B((%22caas%3Acontent-type%2Fvideo%22%2BAND%2B%22caas%3Acontent-type%2Fblog%22))&excludeIds=1fffd42e-9a20-5118-89eb-fae87a84665b&currentEntityId=&featuredCards=c94ec235-50c2-595e-9fa8-0b4602c08712%2Ce9d71f5e-e7c9-5d6d-89e9-2ffdad17b8bd&environment=&draft=true&size=10&flatFile=false',
         fallbackEndpoint: '',
         hideDateInterval: false,
         totalCardsToShow: 10,
@@ -193,11 +203,13 @@ describe('getConfig', () => {
           titleHeadingLevel: 'h3',
           nextCards: 'Next Cards',
           prevCards: 'Previous Cards',
+          sortBy: 'Sort by',
         },
         setCardBorders: false,
         showCardBadges: false,
         showFooterDivider: false,
         useOverlayLinks: false,
+        useCenterVideoPlay: false,
         additionalRequestParams: {},
         dynamicCTAForLiveEvents: false,
         banner: {
@@ -219,6 +231,7 @@ describe('getConfig', () => {
         eventFilter: [],
         type: 'left',
         showEmptyFilters: false,
+        categoryMappings: {},
         categories: [
           {
             group: 'All Topics',
@@ -393,6 +406,7 @@ describe('getConfig', () => {
           card: { saveText: 'Save Card', unsaveText: 'Unsave Card' },
         },
       },
+      products: {},
       search: {
         enabled: false,
         searchFields: [],
@@ -444,7 +458,7 @@ describe('getConfig', () => {
         collectionButtonStyle: 'primary',
         resultsPerPage: 5,
         endpoint:
-          'https://www.adobe.com/chimera-api/collection/myTargetActivity.json?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=fr&country=be&complexQuery=((%22caas%3Aproducts%2Findesign%22%2BAND%2B%22caas%3Aproducts%2Freader%22)%2BAND%2B(%22caas%3Acountry%2Fbr%22%2BOR%2B%22caas%3Acountry%2Fca%22))%2BAND%2B((%22caas%3Acontent-type%2Fvideo%22%2BAND%2B%22caas%3Acontent-type%2Fblog%22))&excludeIds=&currentEntityId=&featuredCards=b6aa23a7-f6bf-51f4-a2b6-0a93fc31bd16%2Ce9d71f5e-e7c9-5d6d-89e9-2ffdad17b8bd&environment=&draft=true&size=10&flatFile=false',
+          'https://www.adobe.com/chimera-api/collection/myTargetActivity.json?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=fr&country=be&complexQuery=((%22caas%3Aproducts%2Findesign%22%2BAND%2B%22caas%3Aproducts%2Freader%22)%2BAND%2B(%22caas%3Acountry%2Fbr%22%2BOR%2B%22caas%3Acountry%2Fca%22))%2BAND%2B((%22caas%3Acontent-type%2Fvideo%22%2BAND%2B%22caas%3Acontent-type%2Fblog%22))&excludeIds=1fffd42e-9a20-5118-89eb-fae87a84665b&currentEntityId=&featuredCards=b6aa23a7-f6bf-51f4-a2b6-0a93fc31bd16%2Ce9d71f5e-e7c9-5d6d-89e9-2ffdad17b8bd&environment=&draft=true&size=10&flatFile=false',
         fallbackEndpoint: '',
         hideDateInterval: false,
         totalCardsToShow: 10,
@@ -465,11 +479,13 @@ describe('getConfig', () => {
           titleHeadingLevel: 'h3',
           nextCards: 'Next Cards',
           prevCards: 'Previous Cards',
+          sortBy: 'Sort by',
         },
         setCardBorders: false,
         showCardBadges: false,
         showFooterDivider: false,
         useOverlayLinks: false,
+        useCenterVideoPlay: false,
         additionalRequestParams: {},
         dynamicCTAForLiveEvents: false,
         banner: {
@@ -491,6 +507,7 @@ describe('getConfig', () => {
         eventFilter: [],
         type: 'left',
         showEmptyFilters: false,
+        categoryMappings: {},
         categories: [
           {
             group: 'All Topics',
@@ -665,6 +682,7 @@ describe('getConfig', () => {
           card: { saveText: 'Save Card', unsaveText: 'Unsave Card' },
         },
       },
+      products: {},
       search: {
         enabled: false,
         searchFields: [],
@@ -710,6 +728,50 @@ describe('getConfig', () => {
       stageDomainsMap: { localhost: { 'www.adobe.com': 'stage.adobe.com', 'business.adobe.com': 'origin' } },
     })).to.eql({});
   });
+
+  describe('localFirstRecencyThreshold', () => {
+    it('is included in sort config when sortDefault is localFirst and threshold is set', async () => {
+      const localState = {
+        ...defaultState,
+        sortDefault: 'localFirst',
+        sortLocalFirstRecencyThreshold: 6,
+      };
+      const config = await getConfig(localState, strings);
+      expect(config.sort.localFirstRecencyThreshold).to.equal(6);
+    });
+
+    it('is included in sort config when sortLocalFirst popup option is checked and threshold is set', async () => {
+      const localState = {
+        ...defaultState,
+        sortEnablePopup: true,
+        sortLocalFirst: true,
+        sortLocalFirstRecencyThreshold: 3,
+      };
+      const config = await getConfig(localState, strings);
+      expect(config.sort.localFirstRecencyThreshold).to.equal(3);
+    });
+
+    it('is omitted from sort config when threshold is null', async () => {
+      const localState = {
+        ...defaultState,
+        sortDefault: 'localFirst',
+        sortLocalFirstRecencyThreshold: null,
+      };
+      const config = await getConfig(localState, strings);
+      expect(config.sort).to.not.have.property('localFirstRecencyThreshold');
+    });
+
+    it('is omitted from sort config when localFirst is not active', async () => {
+      const localState = {
+        ...defaultState,
+        sortDefault: 'dateDesc',
+        sortLocalFirst: false,
+        sortLocalFirstRecencyThreshold: 6,
+      };
+      const config = await getConfig(localState, strings);
+      expect(config.sort).to.not.have.property('localFirstRecencyThreshold');
+    });
+  });
 });
 
 describe('getCountryAndLang', () => {
@@ -725,55 +787,159 @@ describe('getCountryAndLang', () => {
     },
   };
 
-  it('should use country and lang from CaaS Config', () => {
+  beforeEach(() => {
+    // Ensure no langfirst metadata exists for tests that don't explicitly set it
+    const existingLangFirst = document.querySelector('meta[name="langfirst"]');
+    if (existingLangFirst) {
+      existingLangFirst.remove();
+    }
+  });
+
+  it('should use country and lang from CaaS Config', async () => {
     setConfig(cfg);
-    const expected = getCountryAndLang({
+    const expected = await getCountryAndLang({
       ...caasCfg,
       autoCountryLang: false,
     });
     expect(expected).to.deep.eq({
       country: 'ec',
+      geoCountry: null,
       language: 'es',
       locales: '',
     });
   });
 
-  it('should use default country and lang from CaaS Config', () => {
+  it('should use default country and lang from CaaS Config', async () => {
     setConfig(cfg);
-    const expected = getCountryAndLang({ autoCountryLang: false });
+    const expected = await getCountryAndLang({ autoCountryLang: false });
     expect(expected).to.deep.eq({
       country: 'US',
+      geoCountry: null,
       language: 'en',
       locales: '',
     });
   });
 
-  it('should use country and lang from locale in Milo Config', () => {
+  it('should use country and lang from locale in Milo Config', async () => {
     setConfig(cfg);
-    const expected = getCountryAndLang({
+    const expected = await getCountryAndLang({
       ...caasCfg,
       autoCountryLang: true,
     });
     expect(expected).to.deep.eq({
       country: 'BE',
+      geoCountry: null,
       language: 'fr',
       locales: '',
     });
   });
 
-  it('should use default country and lang from locale in Milo Config', () => {
+  it('should use default country and lang from locale in Milo Config', async () => {
     setConfig({
       ...cfg,
       pathname: '/whatever/blah.html',
     });
-    const expected = getCountryAndLang({
+    const expected = await getCountryAndLang({
       ...caasCfg,
       autoCountryLang: true,
     });
     expect(expected).to.deep.eq({
       country: 'US',
+      geoCountry: null,
       language: 'en',
       locales: '',
+    });
+  });
+
+  describe('langFirst with GEO IP', () => {
+    let metaLangFirst;
+    let ogFetch;
+    const LINGO_MAPPING_URL = 'https://www.adobe.com/federal/assets/data/lingo-site-mapping.json';
+    const lingoMappingResponse = () => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        'site-query-index-map': { data: [{ uniqueSiteId: 'hawks-site', caasOrigin: 'hawks' }] },
+        'site-locales': {
+          data: [
+            { uniqueSiteId: 'hawks-site', baseSite: '/fr', regionalSites: 'be,ch' },
+            { uniqueSiteId: 'hawks-site', baseSite: '/', regionalSites: 'be,us' },
+          ],
+        },
+      }),
+    });
+
+    beforeEach(() => {
+      metaLangFirst = document.createElement('meta');
+      metaLangFirst.setAttribute('name', 'langfirst');
+      metaLangFirst.setAttribute('content', 'true');
+      document.head.appendChild(metaLangFirst);
+      ogFetch = window.fetch;
+      window.fetch = stub().callsFake((url) => {
+        const urlStr = typeof url === 'string' ? url : (url?.url ?? url?.href ?? '');
+        const isLingoMapping = urlStr === LINGO_MAPPING_URL || urlStr.includes('lingo-site-mapping.json');
+        return isLingoMapping ? lingoMappingResponse() : ogFetch(url);
+      });
+    });
+
+    afterEach(() => {
+      if (metaLangFirst && metaLangFirst.parentNode) {
+        document.head.removeChild(metaLangFirst);
+      }
+      if (ogFetch) window.fetch = ogFetch;
+    });
+
+    it('should use GEO IP for langFirst when not news source', async () => {
+      setConfig({
+        pathname: '/en/blah.html',
+        locales: { '': { ietf: 'en-US' } },
+        mep: { countryIP: 'us' },
+      });
+
+      const expected = await getCountryAndLang({
+        autoCountryLang: true,
+        source: ['hawks'],
+      });
+
+      expect(expected.country).to.not.eq('xx');
+      expect(expected.language).to.eq('en');
+    });
+
+    it('should NOT use GEO IP for news source', async () => {
+      setConfig({
+        pathname: '/en/blah.html',
+        locales: { '': { ietf: 'en-US' } },
+      });
+
+      const expected = await getCountryAndLang({
+        autoCountryLang: true,
+        source: ['news'],
+      });
+
+      expect(expected.country).to.eq('xx');
+      expect(expected.language).to.eq('en');
+    });
+
+    it('should return valid country with fallback support', async () => {
+      setConfig({
+        pathname: '/en/be/blah.html',
+        locales: {
+          '': { ietf: 'en-US' },
+          be: { ietf: 'nl-BE' },
+        },
+        mep: { countryIP: 'us' },
+      });
+
+      const expected = await getCountryAndLang({
+        autoCountryLang: true,
+        source: ['hawks'],
+      });
+
+      expect(expected).to.have.property('country');
+      expect(expected).to.have.property('language');
+      expect(expected.language).to.eq('en');
+      expect(expected.country).to.not.eq('xx');
+      expect(expected.country).to.be.a('string');
+      expect(expected.country.length).to.be.greaterThan(0);
     });
   });
 
@@ -791,11 +957,140 @@ describe('getCountryAndLang', () => {
       partialLoadCount: 75,
     });
   });
+
+  it('should include useRoundedCorners in the config when enabled', async () => {
+    const state = { ...defaultState, useRoundedCorners: true };
+    const config = await getConfig(state, strings);
+    expect(config.collection.useRoundedCorners).to.be.true;
+  });
+
+  it('should NOT include useRoundedCorners in the config when disabled', async () => {
+    const state = { ...defaultState, useRoundedCorners: false };
+    const config = await getConfig(state, strings);
+    expect(config.collection).to.not.have.property('useRoundedCorners');
+  });
+
+  it('should include editorialOpenVariant when cardStyle is editorial-card and variant is enabled', async () => {
+    const state = {
+      ...defaultState,
+      cardStyle: 'editorial-card',
+      editorialCardOpenVariant: true,
+    };
+    const config = await getConfig(state, strings);
+    expect(config.collection.editorialOpenVariant).to.be.true;
+  });
+
+  it('should NOT include editorialOpenVariant when cardStyle is editorial-card but variant is disabled', async () => {
+    const state = {
+      ...defaultState,
+      cardStyle: 'editorial-card',
+      editorialCardOpenVariant: false,
+    };
+    const config = await getConfig(state, strings);
+    expect(config.collection).to.not.have.property('editorialOpenVariant');
+  });
+
+  it('should NOT include editorialOpenVariant when cardStyle is not editorial-card', async () => {
+    const state = {
+      ...defaultState,
+      cardStyle: 'half-height',
+      editorialCardOpenVariant: true,
+    };
+    const config = await getConfig(state, strings);
+    expect(config.collection).to.not.have.property('editorialOpenVariant');
+  });
+
+  it('should include flexCard.showDateOnFooter in the config when enabled', async () => {
+    const state = {
+      ...defaultState,
+      cardStyle: 'flex-card',
+      flexCardShowDateOnFooter: true,
+    };
+    const config = await getConfig(state, strings);
+    expect(config.collection.flexCard).to.deep.equal({
+      imageOption: 'default',
+      textAlign: 'default',
+      textSize: 'default',
+      hideDetails: false,
+      hideTitle: false,
+      hideDescription: false,
+      showDateOnFooter: true,
+    });
+  });
+
+  it('shoold not show date on footer when flexCardShowDateOnFooter is disabled', async () => {
+    const state = {
+      ...defaultState,
+      cardStyle: 'flex-card',
+      flexCardShowDateOnFooter: false,
+    };
+    const config = await getConfig(state, strings);
+    expect(config.collection.flexCard.showDateOnFooter).to.be.false;
+  });
+
+  it('should populate products from getProducts when detailsTextOption is productName', async () => {
+    const state = { ...defaultState, detailsTextOption: 'productName' };
+    const config = await getConfig(state, strings);
+    expect(config.products).to.deep.equal(caasTags.namespaces.caas.tags.mnemonics.tags);
+    expect(config.products).to.not.be.empty;
+  });
+
+  it('should NOT call getProducts when detailsTextOption is not productName', async () => {
+    const state = { ...defaultState, detailsTextOption: 'default' };
+    const config = await getConfig(state, strings);
+    expect(config.products).to.deep.equal({});
+  });
+
+  it('should include localFirst sort option when sortLocalFirst is enabled', async () => {
+    const state = { ...defaultState, sortLocalFirst: true };
+    const config = await getConfig(state, strings);
+    const sortOptions = config.sort.options;
+    expect(sortOptions.some((o) => o.sort === 'localFirst')).to.be.true;
+  });
+
+  it('should include localLast sort option when sortLocalLast is enabled', async () => {
+    const state = { ...defaultState, sortLocalLast: true };
+    const config = await getConfig(state, strings);
+    const sortOptions = config.sort.options;
+    expect(sortOptions.some((o) => o.sort === 'localLast')).to.be.true;
+  });
+
+  it('should NOT include localFirst or localLast sort options by default', async () => {
+    const config = await getConfig(defaultState, strings);
+    const sortOptions = config.sort.options;
+    expect(sortOptions.some((o) => o.sort === 'localFirst')).to.be.false;
+    expect(sortOptions.some((o) => o.sort === 'localLast')).to.be.false;
+  });
+
+  it('should append current page UUID to excludeIds in the endpoint', async () => {
+    const config = await getConfig(defaultState, strings);
+    const { endpoint } = config.collection;
+    const excludeIds = new URLSearchParams(endpoint.replace(/.*\?/, '?')).get('excludeIds');
+    // The current page UUID must be present in excludeIds
+    expect(excludeIds).to.be.a('string');
+    expect(excludeIds.length).to.be.greaterThan(0);
+  });
+
+  it('should combine existing excludedCards with current page UUID in excludeIds', async () => {
+    const existingId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const state = {
+      ...defaultState,
+      excludedCards: [{ contentId: existingId }],
+    };
+    const config = await getConfig(state, strings);
+    const { endpoint } = config.collection;
+    const excludeIdsEncoded = endpoint.match(/excludeIds=([^&]*)/)?.[1] ?? '';
+    const excludeIds = decodeURIComponent(excludeIdsEncoded);
+    expect(excludeIds).to.include(existingId);
+    // Should also have the page UUID (a second UUID separated by comma)
+    expect(excludeIds.split(',').length).to.be.greaterThan(1);
+  });
 });
 
 describe('getFloodgateCaasConfig', () => {
   const caasFgState = defaultState;
   caasFgState.fetchCardsFromFloodgateTree = true;
+  caasFgState.floodgateColor = 'pink';
   caasFgState.draftDb = true;
 
   it('should return a floodgate enabled caas config object', async () => {
@@ -812,7 +1107,7 @@ describe('getFloodgateCaasConfig', () => {
         collectionButtonStyle: 'primary',
         resultsPerPage: 5,
         endpoint:
-          'https://www.adobe.com/chimera-api/collection/myTargetActivity.json?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=en&country=us&complexQuery=((%22caas%3Aproducts%2Findesign%22%2BAND%2B%22caas%3Aproducts%2Freader%22)%2BAND%2B(%22caas%3Acountry%2Fbr%22%2BOR%2B%22caas%3Acountry%2Fca%22))%2BAND%2B((%22caas%3Acontent-type%2Fvideo%22%2BAND%2B%22caas%3Acontent-type%2Fblog%22))&excludeIds=&currentEntityId=&featuredCards=c94ec235-50c2-595e-9fa8-0b4602c08712%2Ce9d71f5e-e7c9-5d6d-89e9-2ffdad17b8bd&environment=&draft=true&size=10&flatFile=false',
+          'https://www.adobe.com/chimera-api/collection/myTargetActivity.json?originSelection=hawks&contentTypeTags=&secondSource=&secondaryTags=&collectionTags=&excludeContentWithTags=&language=en&country=us&complexQuery=((%22caas%3Aproducts%2Findesign%22%2BAND%2B%22caas%3Aproducts%2Freader%22)%2BAND%2B(%22caas%3Acountry%2Fbr%22%2BOR%2B%22caas%3Acountry%2Fca%22))%2BAND%2B((%22caas%3Acontent-type%2Fvideo%22%2BAND%2B%22caas%3Acontent-type%2Fblog%22))&excludeIds=1fffd42e-9a20-5118-89eb-fae87a84665b&currentEntityId=&featuredCards=c94ec235-50c2-595e-9fa8-0b4602c08712%2Ce9d71f5e-e7c9-5d6d-89e9-2ffdad17b8bd&environment=&draft=true&size=10&flatFile=false',
         fallbackEndpoint: '',
         hideDateInterval: false,
         totalCardsToShow: 10,
@@ -833,11 +1128,13 @@ describe('getFloodgateCaasConfig', () => {
           titleHeadingLevel: 'h3',
           nextCards: 'Next Cards',
           prevCards: 'Previous Cards',
+          sortBy: 'Sort by',
         },
         setCardBorders: false,
         showCardBadges: false,
         showFooterDivider: false,
         useOverlayLinks: false,
+        useCenterVideoPlay: false,
         additionalRequestParams: {},
         dynamicCTAForLiveEvents: false,
         banner: {
@@ -859,6 +1156,7 @@ describe('getFloodgateCaasConfig', () => {
         eventFilter: [],
         type: 'left',
         showEmptyFilters: false,
+        categoryMappings: {},
         categories: [
           {
             group: 'All Topics',
@@ -1033,6 +1331,7 @@ describe('getFloodgateCaasConfig', () => {
           card: { saveText: 'Save Card', unsaveText: 'Unsave Card' },
         },
       },
+      products: {},
       search: {
         enabled: false,
         searchFields: [],
@@ -1109,5 +1408,113 @@ describe('getGrayboxExperienceId', () => {
 
     const experienceId = getGrayboxExperienceId(hostname, pathname);
     expect(experienceId).to.equal('test-exp');
+  });
+});
+
+describe('isLocaleInRegionalSites helper function tests', () => {
+  // This tests the helper function logic inline since it's not exported
+  const isLocaleInRegionalSites = (regionalSites, locStr, langStr) => {
+    if (!regionalSites) return false;
+    const sites = regionalSites
+      .split(',')
+      .map((site) => site.trim().replace(/^\//, ''));
+    return (
+      sites.includes(locStr)
+      || (Boolean(langStr) && sites.includes(`${locStr}_${langStr}`))
+    );
+  };
+
+  describe('Locale examples', () => {
+    it('should match "ca_fr" in "/ca_fr, /ch_fr, /be_fr"', () => {
+      const result = isLocaleInRegionalSites('/ca_fr, /ch_fr, /be_f', 'ca_fr');
+      expect(result).to.be.true;
+    });
+
+    it('should NOT match "ca" in "/africa" (was a substring bug)', () => {
+      const result = isLocaleInRegionalSites('/africa', 'ca');
+      expect(result).to.be.false;
+    });
+
+    it('should NOT match "ca" in "/ca_fr" (partial locale bug)', () => {
+      const result = isLocaleInRegionalSites('/ca_fr', 'ca');
+      expect(result).to.be.false;
+    });
+
+    it('should NOT match "en" in "/ae_en, /be_en" (suffix bug)', () => {
+      const result = isLocaleInRegionalSites('/ae_en, /be_en', 'en');
+      expect(result).to.be.false;
+    });
+
+    it('should NOT match "fr" in "/ca_fr, /be_fr, /ch_fr" (suffix bug)', () => {
+      const result = isLocaleInRegionalSites('/ca_fr, /be_fr, /ch_fr', 'fr');
+      expect(result).to.be.false;
+    });
+
+    it('should match compound locale when locStr and langStr combine to a list entry', () => {
+      const result = isLocaleInRegionalSites('/ca_fr, /ch_fr', 'ca', 'fr');
+      expect(result).to.be.true;
+    });
+
+    it('should not match compound when langStr is omitted and list only has combined codes', () => {
+      const result = isLocaleInRegionalSites('/ca_fr', 'ca');
+      expect(result).to.be.false;
+    });
+  });
+
+  describe('Edge cases and error handling', () => {
+    it('should return false for empty string', () => {
+      const result = isLocaleInRegionalSites('', 'ca');
+      expect(result).to.be.false;
+    });
+
+    it('should return false for null', () => {
+      const result = isLocaleInRegionalSites(null, 'ca');
+      expect(result).to.be.false;
+    });
+
+    it('should return false for undefined', () => {
+      const result = isLocaleInRegionalSites(undefined, 'ca');
+      expect(result).to.be.false;
+    });
+
+    it('should handle whitespace in list "/ca , /ie , /nz"', () => {
+      const result = isLocaleInRegionalSites('/ca , /ie , /nz', 'ie');
+      expect(result).to.be.true;
+    });
+
+    it('should return false when locale not in list', () => {
+      const result = isLocaleInRegionalSites('/ca, /ie, /nz', 'sg');
+      expect(result).to.be.false;
+    });
+  });
+});
+
+describe('initBulkPublisherLingoMapping', () => {
+  let ogFetch;
+  const LINGO_MAPPING_URL = 'https://milo.adobe.com/federal/assets/data/lingo-site-mapping.json';
+
+  beforeEach(() => {
+    ogFetch = window.fetch;
+  });
+
+  afterEach(() => {
+    window.fetch = ogFetch;
+  });
+
+  it('overwrites a previously cached fqdn with bulkpublisher', async () => {
+    const fetchedUrls = [];
+    window.fetch = stub().callsFake((url) => {
+      fetchedUrls.push(url);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    // Simulate cache already warmed by a different fqdn
+    window.fetch(`${LINGO_MAPPING_URL}?www.adobe.com`);
+    fetchedUrls.length = 0;
+
+    initBulkPublisherLingoMapping();
+
+    expect(fetchedUrls).to.have.length(1);
+    expect(fetchedUrls[0]).to.equal(`${LINGO_MAPPING_URL}?bulkpublisher`);
   });
 });

@@ -1,4 +1,3 @@
-import { importMapsPlugin } from '@web/dev-server-import-maps';
 import { defaultReporter, summaryReporter } from '@web/test-runner';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 
@@ -8,7 +7,7 @@ function customReporter() {
   return {
     async reportTestFileResults({ logger, sessionsForTestFile }) {
       sessionsForTestFile.forEach((session) => {
-        session.testResults.tests.forEach((test) => {
+        session.testResults?.tests?.forEach((test) => {
           if (!test.passed && !test.skipped) {
             logger.log(test);
           }
@@ -45,7 +44,8 @@ export default {
     ],
   },
   testFramework: { config: { retries: GITHUB_ACTIONS ? 1 : 0 } },
-  plugins: [importMapsPlugin({})],
+  testsFinishTimeout: 130000,
+  plugins: [],
   reporters: [
     defaultReporter({ reportTestResults: true, reportTestProgress: true }),
     customReporter(),
@@ -53,6 +53,13 @@ export default {
   testRunnerHtml: (testFramework) => `
     <html>
       <head>
+        <script type="importmap">
+          {
+            "imports": {
+              "https://www.adobe.com/mas/libs/": "/node_modules/@adobecom/mas-platform/web-components/dist/"
+            }
+          }
+        </script>
         <link rel="icon" href="/libs/img/favicons/favicon.ico" size="any">
         <script type='module'>
           const oldFetch = window.fetch;
@@ -67,9 +74,9 @@ export default {
           };
 
           const oldXHROpen = XMLHttpRequest.prototype.open;
-          XMLHttpRequest.prototype.open = async function (...args) {
+          XMLHttpRequest.prototype.open = function (...args) {
             let [method, url, asyn] = args;
-            if (!resource.startsWith('/') && url.startsWith('http://localhost')) {
+            if (!url.startsWith('/') && !url.startsWith('http://localhost')) {
               console.error(
                 '** XMLHttpRequest request for an external resource is disallowed in unit tests, please find a way to mock! https://github.com/orgs/adobecom/discussions/814#discussioncomment-6060759 provides guidance on how to fix the issue.',
                 url

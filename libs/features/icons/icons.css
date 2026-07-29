@@ -10,7 +10,7 @@
 }
 
 .milo-tooltip::before {
-  content: attr(data-tooltip);
+  content: attr(data-tooltip) / '';
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -105,6 +105,13 @@
 .milo-tooltip:focus::after,
 .milo-tooltip:active::after {
   display: block;
+}
+
+@supports (-webkit-backdrop-filter: blur(1px)) and (not (backdrop-filter: blur(1px))) {
+  .milo-tooltip:focus::before {
+    outline: 4px solid -webkit-focus-ring-color;
+    outline-offset: 1px;
+  }
 }
 
 .milo-tooltip.hide-tooltip::before,

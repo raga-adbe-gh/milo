@@ -1,13 +1,13 @@
 import { sendKeys, setViewport } from '@web/test-runner-commands';
 import { expect } from '@esm-bundle/chai';
-import { decorateLinks, loadStyle, setConfig } from '../../../libs/utils/utils.js';
+import { decorateLinksAsync, loadStyle, setConfig } from '../../../libs/utils/utils.js';
 import { mockFetch, readMockText } from '../merch/mocks/fetch.js';
 
 const { default: init } = await import('../../../libs/blocks/merch-card/merch-card.js');
 const delay = (duration = 100) => new Promise((resolve) => { setTimeout(resolve, duration); });
 
 const locales = { '': { ietf: 'en-US', tk: 'hah7vzn.css' } };
-const conf = { locales };
+const conf = { codeRoot: '/libs', locales };
 setConfig(conf);
 
 document.head.appendChild(document.createElement('mas-commerce-service'));
@@ -144,7 +144,7 @@ describe('Catalog Card', () => {
   it('Decorates with mnemonic link', async () => {
     document.body.innerHTML = await readMockText('/test/blocks/merch-card/mocks/catalog.html');
     const el = document.getElementById('mnemonic-link');
-    await decorateLinks(document.body);
+    await decorateLinksAsync(document.body);
     const merchCard = await init(el);
     const [icon1, icon2] = merchCard.querySelectorAll('merch-icon');
     expect(icon1.outerHTML).to.equal('<merch-icon slot="icons" src="http://localhost:2000/test/blocks/merch-card/mocks/photoshop.svg" alt="Photoshop" href="https://www.adobe.com/photoshop.html?source=icon1" size="l"></merch-icon>');
@@ -268,6 +268,12 @@ describe('Catalog Card', () => {
       buttons: ['Learn More', 'Save now'],
     });
     expect(merchCard.classList.contains('intro-pricing')).to.be.true;
+  });
+
+  it('Update merch icon alt text', async () => {
+    document.body.innerHTML = await readMockText('/test/blocks/merch-card/mocks/catalog.html');
+    const merchCard = await init(document.querySelector('.merch-card.catalog.icon-alt'));
+    expect(merchCard.querySelector('merch-icon').getAttribute('alt')).to.equal('Use this heading text for icon alt text');
   });
 });
 

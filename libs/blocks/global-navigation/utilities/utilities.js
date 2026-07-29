@@ -5,11 +5,13 @@ import {
   loadStyle,
   loadLana,
   isLocalNav,
-  decorateLinks,
-  localizeLink,
+  decorateLinksAsync,
+  localizeLinkAsync,
   getFederatedContentRoot,
   getFederatedUrl,
   getFedsPlaceholderConfig,
+  createTag,
+  loadBlock,
 } from '../../../utils/utils.js';
 import { replaceKey, replaceText, fetchPlaceholders } from '../../../features/placeholders.js';
 import { PERSONALIZATION_TAGS, FLAGS, handleCommands } from '../../../features/personalization/personalization.js';
@@ -63,7 +65,13 @@ export const darkIcons = {
   company: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="22" viewBox="0 0 24 22" fill="none"><path d="M14.2353 21.6209L12.4925 16.7699H8.11657L11.7945 7.51237L17.3741 21.6209H24L15.1548 0.379395H8.90929L0 21.6209H14.2353Z" fill="#FFFFFF"/></svg>',
 };
 
-export const lanaLog = ({ message, e = '', tags = 'default', errorType }) => {
+export const lanaLog = ({
+  message,
+  e = '',
+  tags = 'default',
+  errorType,
+  severity,
+} = {}) => {
   const { locale = {} } = getConfig();
   const url = getMetadata('gnav-source') || `${locale.contentRoot}/gnav`;
   window.lana.log(`${message} | gnav-source: ${url} | href: ${window.location.href} | ${e.reason || e.error || e.message || e}`, {
@@ -71,6 +79,7 @@ export const lanaLog = ({ message, e = '', tags = 'default', errorType }) => {
     sampleRate: 1,
     tags,
     errorType,
+    severity,
   });
 };
 
@@ -116,19 +125,37 @@ export const logPerformance = (
   }
 };
 
-export const logErrorFor = async (fn, message, tags, errorType) => {
+export const logErrorFor = async (fn, message, tags, errorType, severity = 'error') => {
   try {
     await fn();
   } catch (e) {
-    lanaLog({ message, e, tags, errorType });
+    lanaLog({ message, e, tags, errorType, severity });
+    throw new Error(e);
   }
 };
 
 export function addMepHighlightAndTargetId(el, source) {
   let { manifestId, targetManifestId } = source.dataset;
-  manifestId ??= source?.closest('[data-manifest-id]')?.dataset?.manifestId;
+  const manifestIdEl = source?.closest('[data-manifest-id]');
+  manifestId ??= manifestIdEl?.dataset?.manifestId;
   targetManifestId ??= source?.closest('[data-adobe-target-testid]')?.dataset?.adobeTargetTestid;
-  if (manifestId) el.dataset.manifestId = manifestId;
+  if (manifestId) {
+    el.dataset.manifestId = manifestId;
+    let path = source.dataset?.path
+      || el.dataset?.path
+      || source?.closest('[data-path]')?.dataset?.path
+      || manifestIdEl?.dataset?.path
+      || manifestIdEl?.querySelector('[data-path]')?.dataset?.path;
+    if (path) {
+      try {
+        path = new URL(path).pathname;
+      } catch {
+        // Already a path, keep as-is
+      }
+      el.dataset.path = path;
+    }
+    el.dataset.manifestDisplay = path ? `${manifestId}: ${path}` : `${manifestId}: html`;
+  }
   if (targetManifestId) el.dataset.adobeTargetTestid = targetManifestId;
   return el;
 }
@@ -149,6 +176,34 @@ export function toFragment(htmlStrings, ...values) {
   });
 
   return fragment;
+}
+
+export async function createErrorPopup() {
+  const errorIcon = `<svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M18.9987 28.7344C18.5604 28.7499 18.1335 28.5943 17.8081 28.3006C17.1805 27.6078 17.1805 26.5527 17.8081 25.8599C18.1299 25.5591 18.5583 25.3986 18.9987 25.4139C19.4478 25.3959 19.8839 25.5664 20.2015 25.884C20.5094 26.2027 20.6749 26.6324 20.6601 27.075C20.6836 27.5209 20.5279 27.9577 20.2274 28.2884C19.8976 28.601 19.4525 28.7626 18.9987 28.7344Z" fill="#292929"/>
+    <path d="M19 22.325C18.2132 22.325 17.575 21.6867 17.575 20.9V13.3C17.575 12.5133 18.2132 11.875 19 11.875C19.7867 11.875 20.425 12.5133 20.425 13.3V20.9C20.425 21.6867 19.7867 22.325 19 22.325Z" fill="#292929"/>
+    <path d="M31.7934 34.2001H6.20649C4.68594 34.2001 3.31289 33.4208 2.53451 32.1145C1.75614 30.8083 1.72274 29.2293 2.44637 27.8914L15.2399 4.24166C15.9876 2.85933 17.4284 2.00024 19 2.00024C20.5715 2.00024 22.0123 2.85933 22.7601 4.24166L35.5535 27.8915C36.2771 29.2293 36.2437 30.8083 35.4654 32.1145C34.687 33.4208 33.314 34.2001 31.7934 34.2001ZM19 4.85024C18.7448 4.85024 18.1112 4.92262 17.7466 5.59615L4.95312 29.246C4.60521 29.8898 4.85757 30.4465 4.9828 30.6543C5.10711 30.8639 5.47543 31.3501 6.20647 31.3501H31.7934C32.5245 31.3501 32.8928 30.8639 33.0171 30.6543C33.1423 30.4464 33.3947 29.8898 33.0467 29.246L20.2533 5.59615C19.8887 4.92262 19.2551 4.85024 19 4.85024Z" fill="#292929"/>
+  </svg>`;
+
+  // Get localized error messages using placeholder system
+  const [errorTitle, errorMessage, tryAgainMessage] = await Promise.all([
+    replaceKey('something-went-wrong', getFedsPlaceholderConfig()),
+    replaceKey('unexpected-error', getFedsPlaceholderConfig()),
+    replaceKey('please-try-again', getFedsPlaceholderConfig()),
+  ]);
+
+  return createTag('div', { class: 'feds-popup error' }, `
+    <div class="feds-menu-container">
+      <div class="feds-menu-content" style="text-align: center;justify-content: center;">
+        <div class="feds-menu-error">
+          ${errorIcon}
+          <h4 style="margin: 0 0 8px 0;">${errorTitle}</h4>
+          <p style="margin: 0 0 4px 0;">${errorMessage}</p>
+          <p style="margin: 0;">${tryAgainMessage}</p>
+        </div>
+      </div>
+    </div>
+  `);
 }
 
 const getPath = (urlOrPath = '') => {
@@ -256,6 +311,7 @@ export function setCurtainState(state) {
 }
 
 export const isDesktop = window.matchMedia('(min-width: 900px)');
+export const isSmallScreen = window.matchMedia('(max-width: 320px)');
 export const isDesktopForContext = (context = 'viewport') => {
   const isContainerResponsiveFooter = document.querySelector('.global-footer')?.classList.contains('responsive-container');
   if (context === 'footer' && isContainerResponsiveFooter) {
@@ -307,9 +363,14 @@ export function setActiveDropdown(elem, type) {
   });
 }
 
-export const animateInSequence = (xs, gap) => {
+export const animateInSequence = (xs, gap, { restart = false } = {}) => {
   for (let i = 0; i < xs.length; i += 1) {
-    xs[i].style = `animation-delay: ${(i + 1) * gap}s`;
+    if (restart) {
+      xs[i].style.setProperty('animation', 'none');
+      xs[i].getBoundingClientRect();
+      xs[i].style.removeProperty('animation');
+    }
+    xs[i].style.setProperty('animation-delay', `${(i + 1) * gap}s`);
   }
 };
 
@@ -349,11 +410,65 @@ export const [hasActiveLink, setActiveLink, isActiveLink, getActiveLink] = (() =
 
       if (!activeLink) return null;
 
+      activeLink.dataset.activeLinkHref = activeLink.href;
       setActiveLink(true);
       return activeLink;
     },
   ];
 })();
+
+const ACTIVE_LINK_ATTRS = ['role', 'aria-disabled', 'aria-current', 'tabindex'];
+
+export function updateGnavActiveLink() {
+  const activeNavItemClass = selectors.activeNavItem.slice(1);
+  const deferredActiveNavItemClass = selectors.deferredActiveNavItem.slice(1);
+
+  document.querySelectorAll('a[data-active-link-href]').forEach((link) => {
+    const savedHref = link.getAttribute('data-active-link-href');
+    if (savedHref) link.setAttribute('href', savedHref);
+    link.removeAttribute('data-active-link-href');
+    ACTIVE_LINK_ATTRS.forEach((attr) => link.removeAttribute(attr));
+  });
+  document
+    .querySelectorAll(`${selectors.activeNavItem}, ${selectors.navItem}[data-active-link-href]`)
+    .forEach((navItem) => {
+      navItem.removeAttribute('data-active-link-href');
+      navItem.classList.remove(activeNavItemClass, deferredActiveNavItemClass);
+      navItem.style.removeProperty('width');
+    });
+
+  setActiveLink(false);
+
+  const nav = document.querySelector(`${selectors.globalNav}, ${selectors.localNav}`);
+  if (!nav) return;
+
+  const { origin, pathname } = window.location;
+  const currentUrl = `${origin}${pathname}`;
+  const matchesUrl = (el) => el.href === currentUrl
+    || el.href.startsWith(`${currentUrl}?`)
+    || el.href.startsWith(`${currentUrl}#`);
+
+  const newActiveLink = [...nav.querySelectorAll('a:not([data-modal-hash])[href]')]
+    .find(matchesUrl);
+
+  if (!newActiveLink) return;
+
+  const navItem = newActiveLink.closest(selectors.navItem);
+  if (!navItem) return;
+
+  navItem.classList.add(activeNavItemClass);
+  newActiveLink.dataset.activeLinkHref = newActiveLink.href;
+
+  if (!newActiveLink.nextElementSibling?.classList.contains('feds-popup')) {
+    newActiveLink.removeAttribute('href');
+    newActiveLink.setAttribute('role', 'link');
+    newActiveLink.setAttribute('aria-disabled', 'true');
+    newActiveLink.setAttribute('aria-current', 'page');
+    newActiveLink.setAttribute('tabindex', '0');
+  }
+
+  setActiveLink(true);
+}
 
 export const setAriaAtributes = (dropdownTrigger) => {
   const popup = dropdownTrigger.nextElementSibling;
@@ -463,6 +578,13 @@ export function trigger({
 
 export const yieldToMain = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
+export async function resolveMerchCardFields(content, loader = loadBlock) {
+  const fields = content.querySelectorAll(
+    'a.merch-card-autoblock.link-block[href*="field="]',
+  );
+  await Promise.all([...fields].map((field) => loader(field)));
+}
+
 export async function fetchAndProcessPlainHtml({
   url,
   plainHTMLPromise = null,
@@ -484,12 +606,13 @@ export async function fetchAndProcessPlainHtml({
       tags: 'utilities',
       errorType: 'i',
     });
-    return null;
+    throw new Error('Fail to fetch');
   }
-  const text = await res.text();
+  const text = await (plainHTMLPromise ? res.clone().text() : res.text());
   const { body } = new DOMParser().parseFromString(text, 'text/html');
   if (mepFragment?.manifestId) body.dataset.manifestId = mepFragment.manifestId;
   if (mepFragment?.targetManifestId) body.dataset.adobeTargetTestid = mepFragment.targetManifestId;
+  if (mepFragment?.content) body.dataset.path = mepFragment.content;
   let commands = mepGnav?.commands || [];
 
   const gnavMepCommands = config?.mep?.commands?.filter(
@@ -500,13 +623,22 @@ export async function fetchAndProcessPlainHtml({
 
   if (commands?.length) {
     /* c8 ignore next 3 */
-    handleCommands(commands, body, true, true);
+    await handleCommands(commands, body, true, true);
   }
   const inlineFrags = [...body.querySelectorAll('a[href*="#_inline"]')];
   if (inlineFrags.length) {
     const { default: loadInlineFrags } = await import('../../fragment/fragment.js');
-    const fragPromises = inlineFrags.map((link) => {
-      link.href = getFederatedUrl(localizeLink(link.href));
+    const fragPromises = inlineFrags.map(async (link) => {
+      link.href = await localizeLinkAsync(
+        getFederatedUrl(link.href),
+        window.location.hostname,
+        false,
+        link,
+      );
+      // Skip loadArea for MEP in-block replacements - gnav/footer have their own decoration
+      if (link.dataset.manifestId) {
+        link.dataset.skipLoadArea = 'true';
+      }
       return loadInlineFrags(link);
     });
     await Promise.all(fragPromises);
@@ -514,7 +646,7 @@ export async function fetchAndProcessPlainHtml({
 
   // federatePictureSources should only be called after decorating the links.
   if (shouldDecorateLinks) {
-    decorateLinks(body);
+    await decorateLinksAsync(body);
     federatePictureSources({ section: body, forceFederate: path.includes('/federal/') });
   }
 
@@ -533,6 +665,7 @@ export async function fetchAndProcessPlainHtml({
   }
 
   body.innerHTML = await replaceText(body.innerHTML, getFedsPlaceholderConfig());
+  if (shouldDecorateLinks) await resolveMerchCardFields(body);
   return body;
 }
 
@@ -667,7 +800,6 @@ export const transformTemplateToMobile = async ({
         <div
           id="${i}"
           role="tabpanel"
-          aria-labelledby="${i}"
           class="${links.match(/class\s*=\s*["'][^"']*\bfeds-navLink--header\b[^"']*["']/) !== null ? 'has-subheader' : ''}"
           ${daalhTabContent ? `daa-lh="${daalhTabContent}"` : ''}
           hidden
@@ -705,11 +837,22 @@ export const transformTemplateToMobile = async ({
   closeIcon?.addEventListener('click', closeIconClickCallback);
   main?.addEventListener('click', mainMenuClickCallback);
 
+  if (popup.classList.contains('error')) {
+    const errorDiv = await createErrorPopup();
+    const topBar = popup.querySelector('.top-bar');
+    if (popup) popup.replaceWith(errorDiv);
+    errorDiv.append(closeIcon);
+    errorDiv.prepend(topBar);
+  }
+
   const tabbuttons = popup.querySelectorAll('.tabs button');
   const tabpanels = popup.querySelectorAll('.tab-content [role="tabpanel"]');
   const tabbuttonClickCallbacks = [...tabbuttons].map((tab, i) => () => {
+    const activePanel = tabpanels[i];
+    const activePanelChildren = activePanel ? [...activePanel.children] : [];
     closeAllTabs(tabbuttons, tabpanels);
-    tabpanels?.[i]?.removeAttribute('hidden');
+    activePanel?.removeAttribute('hidden');
+    animateInSequence(activePanelChildren, 0.02, { restart: true });
     tab.setAttribute('aria-selected', 'true');
   });
 
@@ -915,6 +1058,10 @@ export const [branchBannerLoadCheck, getBranchBannerInfo] = (() => {
                 updatePopupPosition();
                 // Optional: Disconnect the observer if you no longer need to track it
                 observer.disconnect();
+              }
+              if (node.classList?.contains('language-banner')) {
+                // Update the popup position when the language banner is removed
+                updatePopupPosition();
               }
             });
           }

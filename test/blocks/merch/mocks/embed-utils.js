@@ -40,11 +40,13 @@ export const loadStyle = stub();
 
 export const getMetadata = stub();
 
-export const localizeLink = stub();
+export const localizeLinkAsync = stub();
 
 export const loadLink = stub();
 
 export const reloadPage = stub();
+
+export const getCountry = stub().resolves('us');
 
 /**
  * TODO: This method will be deprecated and removed in a future version.
@@ -52,3 +54,7 @@ export const reloadPage = stub();
  * @see https://jira.corp.adobe.com/browse/MWPW-174411
 */
 export const shouldAllowKrTrial = stub();
+
+export const lingoActive = () => false;
+export const getGeoLocalePrefix = () => Promise.resolve(null);
+export const getPlaceholderPaths = () => [];

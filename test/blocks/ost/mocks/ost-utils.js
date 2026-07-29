@@ -23,6 +23,8 @@ const loadScript = () => Promise.resolve();
 
 const loadStyle = () => Promise.resolve();
 
+const getCountry = () => Promise.resolve();
+
 const createTag = (tag, attributes = {}) => {
   const element = document.createElement(tag);
   Object.entries(attributes).forEach(([key, value]) => {
@@ -33,7 +35,7 @@ const createTag = (tag, attributes = {}) => {
 
 const loadArea = () => Promise.resolve();
 
-const localizeLink = () => Promise.resolve();
+const localizeLinkAsync = () => Promise.resolve();
 
 const loadLink = () => Promise.resolve();
 
@@ -133,6 +135,10 @@ const shouldAllowKrTrial = (button, localePrefix) => {
   return localePrefix === '/kr' && hasAllowKrTrial;
 };
 
+const lingoActive = () => false;
+const getGeoLocalePrefix = () => Promise.resolve(null);
+const getPlaceholderPaths = () => [];
+
 export {
   createTag,
   getConfig,
@@ -141,7 +147,8 @@ export {
   loadArea,
   loadScript,
   loadStyle,
-  localizeLink,
+  getCountry,
+  localizeLinkAsync,
   loadLink,
   mockOstDeps,
   unmockOstDeps,
@@ -149,4 +156,7 @@ export {
   customFetch,
   SLD,
   shouldAllowKrTrial,
+  lingoActive,
+  getGeoLocalePrefix,
+  getPlaceholderPaths,
 };

@@ -10,6 +10,11 @@ export const AXE_CORE_CONFIG = {
     ['.mep-preview-overlay'],
     ['.preflight-decoration'],
     ['.asset-meta-entry'],
+    ['.milo-preflight-overlay'],
+    ['#preflight'],
+    ['.block-label-container'],
+    ['.adbMsgClientWrapper'],
+    ['#onetrust-consent-sdk'],
   ],
   runOnly: {
     type: 'tag',
@@ -18,7 +23,7 @@ export const AXE_CORE_CONFIG = {
 };
 
 export const CUSTOM_CHECKS_CONFIG = {
-  checks: ['altText', 'color-contrast'],
+  checks: ['altText', 'color-contrast', 'aria-labels', 'video-captions', 'keyboard'],
   include: [['body']],
   exclude: [
     ['.preflight'],
@@ -30,5 +35,10 @@ export const CUSTOM_CHECKS_CONFIG = {
     ['.mep-preview-overlay'],
     ['.preflight-decoration'],
     ['.asset-meta-entry'],
+    ['.milo-preflight-overlay'],
+    ['#preflight'],
+    ['.block-label-container'],
+    ['.adbMsgClientWrapper'],
+    ['#onetrust-consent-sdk'],
   ],
 };

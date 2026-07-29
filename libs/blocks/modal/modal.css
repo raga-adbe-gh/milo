@@ -9,6 +9,11 @@
   --tall-video-padding: var(--spacing-xl);
 }
 
+.branch-banner-is-active {
+  --modal-z-index: 100000;
+  --modal-z-index-curtain: 99999;
+}
+
 .dialog-modal {
   background: #fff;
   border-radius: 6px;
@@ -113,6 +118,11 @@
   left: 0;
   background: rgb(50 50 50 / 80%);
   z-index: var(--modal-z-index-curtain);
+}
+
+html[dir="rtl"] .dialog-modal button.dialog-close {
+  left: 5px;
+  right: auto;
 }
 
 .dialog-modal button.dialog-close {
@@ -355,7 +365,7 @@
   }
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1280px) {
   .dialog-modal.s-size {
     max-width: 650px;
   }
@@ -368,6 +378,14 @@
     width: 1200px;
     max-width: calc((100% - 6px) - 2em);
   }
+
+  .dialog-modal.commerce-frame.crm,
+  .dialog-modal.commerce-frame.d2p,
+  .dialog-modal.commerce-frame.twp {
+    width: 1030px;
+    max-width: 90vw;
+  }
+
 
   .dialog-modal.commerce-frame {
     width: 1024px;
@@ -408,15 +426,13 @@
 
   .dialog-modal.upgrade-flow-modal {
     height: 820px;
-    max-width: 1100px;
+    max-width: 1280px;
     overflow: hidden;
-    width: 80%;
   }
 
   .dialog-modal.three-in-one {
     height: 820px;
-    width: 80%;
-    max-width: 1100px;
+    max-width: 1280px;
     overflow: hidden;
   }
 
@@ -472,3 +488,4 @@
 body:has(.dialog-modal) #adbMsgClientWrapper #adbmsgContainer > * {
   z-index: var(--jarvis-z-index-override);
 }
+

@@ -1,0 +1,141 @@
+name: Preview Indexer (Incremental)
+description: This workflow updates the preview index for the given site and region(s)
+
+on:
+  repository_dispatch:
+    types: [preview-indexer-incremental]
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Site name e.g da-bacom"
+        required: true
+        type: choice
+        options:
+          - da-bacom
+          - da-cc
+          - da-dc
+          - upp
+          - da-events
+          - edu
+          - da-genuine
+      siteRegionPaths:
+        description: "Comma-separated regional paths (e.g. ar,ro) or blank for all regions"
+        required: false
+        type: string
+      lastRunISOFrom:
+        description: "Last ISO From timestamp (GMT: 2025-11-19T18:51:41.007Z)"
+        required: false
+        type: string
+      lastRunISOTo:
+        description: "Last ISO To timestamp (GMT: 2025-11-20T18:51:41.007Z)"
+        required: false
+        type: string
+
+permissions:
+  actions: read # required to access workflow runs
+  contents: write # required to access the repository, for the dispatch event
+
+concurrency:
+  group: preview-indexer-run
+  cancel-in-progress: false
+
+env:
+  ROLLING_IMPORT_IMS_URL: ${{ secrets.ROLLING_IMPORT_IMS_URL }}
+  ROLLING_IMPORT_CLIENT_ID: ${{ secrets.ROLLING_IMPORT_CLIENT_ID }}
+  ROLLING_IMPORT_CLIENT_SECRET: ${{ secrets.ROLLING_IMPORT_CLIENT_SECRET }}
+  ROLLING_IMPORT_CODE: ${{ secrets.ROLLING_IMPORT_CODE }}
+  ROLLING_IMPORT_GRANT_TYPE: ${{ secrets.ROLLING_IMPORT_GRANT_TYPE }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  LINGO_CONFIG: ${{ vars.LINGO_CONFIG }}
+  PREVIEW_INDEXER_REPOS: ${{ vars.PREVIEW_INDEXER_REPOS }}
+  PREVIEW_INDEX_FILE: ${{ vars.PREVIEW_INDEX_FILE }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN }}
+  AEM_ADMIN_TOKEN_ADOBECOM_DA_BACOM: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_DA_BACOM }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_BACOM: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_BACOM }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_BACOM: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_BACOM }}
+  PREVIEW_INDEX_KEY_ADOBECOM_DA_BACOM: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_DA_BACOM }}
+  PREVIEW_PATH_EXTN_ADOBECOM_DA_BACOM: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_DA_BACOM }}
+  PREVIEW_INDEXER_LOG_LEVEL: ${{ vars.PREVIEW_INDEXER_LOG_LEVEL }}
+  AEM_ADMIN_TOKEN_ADOBECOM_DA_CC: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_DA_CC }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_CC: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_CC }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_CC: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_CC }}
+  PREVIEW_INDEX_KEY_ADOBECOM_DA_CC: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_DA_CC }}
+  PREVIEW_INDEX_FILE_ADOBECOM_DA_CC: ${{ vars.PREVIEW_INDEX_FILE_ADOBECOM_DA_CC }}
+  PREVIEW_PATH_EXTN_ADOBECOM_DA_CC: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_DA_CC }}
+  AEM_ADMIN_TOKEN_ADOBECOM_DA_DC: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_DA_DC }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_DC: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_DC }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_DC: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_DC }}
+  PREVIEW_INDEX_KEY_ADOBECOM_DA_DC: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_DA_DC }}
+  PREVIEW_INDEX_FILE_ADOBECOM_DA_DC: ${{ vars.PREVIEW_INDEX_FILE_ADOBECOM_DA_DC }}
+  PREVIEW_PATH_EXTN_ADOBECOM_DA_DC: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_DA_DC }}
+  AEM_ADMIN_TOKEN_ADOBECOM_UPP: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_UPP }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_UPP: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_UPP }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_UPP: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_UPP }}
+  PREVIEW_INDEX_KEY_ADOBECOM_UPP: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_UPP }}
+  PREVIEW_INDEX_FILE_ADOBECOM_UPP: ${{ vars.PREVIEW_INDEX_FILE_ADOBECOM_UPP }}
+  PREVIEW_PATH_EXTN_ADOBECOM_UPP: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_UPP }}
+  AEM_ADMIN_TOKEN_ADOBECOM_DA_EVENTS: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_DA_EVENTS }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_EVENTS: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_EVENTS }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_EVENTS: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_EVENTS }}
+  PREVIEW_INDEX_KEY_ADOBECOM_DA_EVENTS: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_DA_EVENTS }}
+  PREVIEW_INDEX_FILE_ADOBECOM_DA_EVENTS: ${{ vars.PREVIEW_INDEX_FILE_ADOBECOM_DA_EVENTS }}
+  PREVIEW_PATH_EXTN_ADOBECOM_DA_EVENTS: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_DA_EVENTS }}
+  AEM_ADMIN_TOKEN_ADOBECOM_EDU: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_EDU }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_EDU: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_EDU }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_EDU: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_EDU }}
+  PREVIEW_INDEX_KEY_ADOBECOM_EDU: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_EDU }}
+  PREVIEW_INDEX_FILE_ADOBECOM_EDU: ${{ vars.PREVIEW_INDEX_FILE_ADOBECOM_EDU }}
+  PREVIEW_PATH_EXTN_ADOBECOM_EDU: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_EDU }}
+  AEM_ADMIN_TOKEN_ADOBECOM_DA_GENUINE: ${{ secrets.AEM_ADMIN_TOKEN_ADOBECOM_DA_GENUINE }}
+  EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_GENUINE: ${{ vars.EXCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_GENUINE }}
+  INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_GENUINE: ${{ vars.INCLUDE_PREVIEW_PATHS_PATTERN_ADOBECOM_DA_GENUINE }}
+  PREVIEW_INDEX_KEY_ADOBECOM_DA_GENUINE: ${{ vars.PREVIEW_INDEX_KEY_ADOBECOM_DA_GENUINE }}
+  PREVIEW_INDEX_FILE_ADOBECOM_DA_GENUINE: ${{ vars.PREVIEW_INDEX_FILE_ADOBECOM_DA_GENUINE }}
+  PREVIEW_PATH_EXTN_ADOBECOM_DA_GENUINE: ${{ vars.PREVIEW_PATH_EXTN_ADOBECOM_DA_GENUINE }}
+
+jobs:
+  preview-indexer:
+    if: github.repository == 'adobecom/milo'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Restore cached state
+        id: cache-restore
+        uses: actions/cache@v4
+        with:
+          path: preview-indexer/state/last-runs.json
+          key: preview-indexer-last-runs-${{ github.run_id }}
+          restore-keys: |
+            preview-indexer-last-runs-
+
+      - name: Initialize file if missing
+        run: |
+          mkdir -p preview-indexer/state
+          if [ ! -f preview-indexer/state/last-runs.json ]; then
+            echo "{}" > preview-indexer/state/last-runs.json
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 21
+
+      - name: Install dependencies
+        run: cd ./.github/workflows/preview-indexer/ && npm install
+
+      - name: Run preview-indexer/incremental.js
+        run: node ./.github/workflows/preview-indexer/incremental.js
+        env:
+          LAST_RUN_ISO_TO: ${{ github.event.inputs.lastRunISOTo }}
+          LAST_RUN_ISO_FROM: ${{ github.event.inputs.lastRunISOFrom }}
+          SITE: ${{ github.event.inputs.site }}
+          SITE_REGION_PATHS: ${{ github.event.inputs.siteRegionPaths }}
+
+      - name: Save updated cache
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: preview-indexer/state/last-runs.json
+          key: preview-indexer-last-runs-${{ github.run_id }}

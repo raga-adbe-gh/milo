@@ -9,9 +9,8 @@
 /libs/features/georouting/ @adobecom/milo-core
 /libs/features/georoutingv2/ @adobecom/milo-core
 /libs/features/icons/ @adobecom/milo-core
-/libs/features/mas/ @adobecom/tacocat
 /libs/features/personalization/ @adobecom/mep-squad
-/libs/features/seotech/ @adobecom/milo-core
+/libs/features/seotech/ @hparra
 /libs/features/spectrum-web-components/ @adobecom/tacocat
 /libs/features/webapp-prompt/ @adobecom/feds
 /libs/features/footer-promo.js @meganthecoder @JasonHowellSlavin @Brandon32
@@ -45,7 +44,9 @@
 /libs/blocks/chart/ @meganthecoder @Brandon32 @JasonHowellSlavin
 /libs/blocks/columns/ @adobecom/milo-core
 /libs/blocks/commerce/ @adobecom/tacocat
+/libs/blocks/comparison-table/ @adobecom/milo-core
 /libs/blocks/editorial-card/ @adobecom/milo-core
+/libs/blocks/email-collection/ @adobecom/milo-core
 /libs/blocks/event-rich-results/ @adobecom/milo-core
 /libs/blocks/faas-config/ @seanchoi-dev
 /libs/blocks/faas/ @seanchoi-dev
@@ -81,6 +82,7 @@
 /libs/blocks/marquee/ @adobecom/milo-core
 /libs/blocks/martech-metadata/ @vgoodric
 /libs/blocks/media/ @adobecom/milo-core
+/libs/blocks/mas-compare-chart-autoblock/ @adobecom/tacocat
 /libs/blocks/merch-card-autoblock/ @adobecom/tacocat
 /libs/blocks/merch-card-collection-autoblock/ @adobecom/tacocat
 /libs/blocks/merch-card-collection/ @adobecom/tacocat
@@ -101,6 +103,7 @@
 /libs/blocks/pdf-vewer/ @meganthecoder @JasonHowellSlavin @Brandon32
 /libs/blocks/preflight/ @adobecom/milo-core
 /libs/blocks/promo/ @adobecom/milo-core
+/libs/blocks/quick-facts/ @meganthecoder @JasonHowellSlavin @Brandon32
 /libs/blocks/quiz-marquee/ @colloyd @sabyamon @fullcolorcoder @JackySun9
 /libs/blocks/quiz-results/ @colloyd @sabyamon @fullcolorcoder @JackySun9
 /libs/blocks/quiz/ @colloyd @sabyamon @fullcolorcoder @JackySun9
@@ -128,7 +131,7 @@
 /libs/blocks/twitter/ @adobecom/milo-core
 /libs/blocks/utils/ @adobecom/milo-core
 /libs/blocks/version-history/ @bandana147
-/libs/blocks/video-metadata/ @adobecom/milo-core
+/libs/blocks/video-metadata/ @hparra
 /libs/blocks/video/ @adobecom/milo-core
 /libs/blocks/vimeo/ @adobecom/milo-core
 /libs/blocks/walls-io/ @adobecom/milo-core
@@ -138,3 +141,8 @@
 # Standalone Gnav
 /libs/navigation/ @adobecom/feds
 /libs/martech/attributes.js @adobecom/mep-squad
+
+# Claude Skills
+/.claude/skills/build-block-from-figma/ @adobecom/milo-core
+/.claude/skills/build-content-from-figma/ @adobecom/milo-core
+/.claude/skills/build-scroll-animation/ @adobecom/milo-core

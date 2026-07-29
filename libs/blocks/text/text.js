@@ -64,6 +64,8 @@ function decorateLinkFarms(el) {
   title.querySelector('h1, h2, h3, h4, h5, h6')?.classList.add('heading-l');
   foregroundDiv.querySelectorAll('p').forEach((p) => p.classList.add('body-s'));
   foregroundDiv.querySelectorAll('div').forEach((divElem, index) => {
+    divElem.setAttribute('role', 'list');
+    [...divElem.children].forEach((child) => child.setAttribute('role', 'listitem'));
     const heading = divElem.querySelector('h1, h2, h3, h4, h5, h6');
     heading?.classList.add('heading-xs');
     if (!hCount) return;
@@ -141,5 +143,15 @@ export default async function init(el) {
   // Override Detail with Title L style if class exists - Temporary solution until Spectrum 2
   if (el.classList.contains('l-title')) {
     el.querySelectorAll('[class*="detail-"]')?.forEach((detail) => detail.classList.add('title-l'));
+  }
+  if (el.classList.contains('link-spacer')) {
+    el.querySelectorAll('[class^="body-"]').forEach((bodyElem) => {
+      const isAllowedLink = (n) => n.nodeType === 1 && n.tagName === 'A'
+        && (!n.className || (n.classList.contains('modal') && n.classList.contains('link-block')));
+      if ([...bodyElem.childNodes].every((n) => isAllowedLink(n)
+        || (n.nodeType === 3 && n.textContent.trim() === ''))) {
+        bodyElem.classList.add('link-list');
+      }
+    });
   }
 }

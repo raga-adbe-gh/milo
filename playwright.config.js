@@ -1,10 +1,39 @@
+/* eslint-disable no-unused-vars */
 /* eslint-disable import/no-extraneous-dependencies */
 
 const { devices } = require('@playwright/test');
+const { getSkipTestFiles } = require('./nala/libs/skip-tests.js');
 
-const USER_AGENT_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.18 Safari/537.36 NALA-Acom';
-const USER_AGENT_MOBILE_CHROME = 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36 NALA-Acom';
-const USER_AGENT_MOBILE_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1 NALA-Acom';
+const USER_AGENT_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.6900.0 Safari/537.36 NALA-Acom';
+const USER_AGENT_MOBILE_CHROME = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.6900.0 Mobile Safari/537.36 NALA-Acom';
+const USER_AGENT_MOBILE_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 NALA-Acom';
+
+const isCI = !!process.env.CI;
+const isLocal = !isCI;
+
+// MAS tests
+const masFeatures = [
+  'features/commerce/**/*.test.js',
+  'features/promotions/**/*.test.js',
+  'features/osttools/**/*.test.js',
+];
+
+// MEP tests
+const mepFeatures = [
+  'features/personalization/**/*.test.js',
+];
+
+// Milo tests (non MAS & MEP)
+const miloIgnore = isCI
+  ? [
+    'features/mas/**',
+    'features/commerce/**',
+    'features/promotions/**',
+    'features/osttools/**',
+    'features/personalization/**',
+    'features/dafloodgate/**',
+  ]
+  : []; // In local runs → allow @mas annotations to work
 
 /**
  * @see https://playwright.dev/docs/test-configuration
@@ -21,7 +50,7 @@ const config = {
      * Maximum time expect() should wait for the condition to be met.
      * For example in `await expect(locator).toHaveText();`
      */
-    timeout: 5000,
+    timeout: 12000,
   },
   testMatch: '**/*.test.js',
   /* Run tests in files in parallel */
@@ -34,7 +63,7 @@ const config = {
   workers: process.env.CI ? 7 : 3,
   /* Reporter to use. */
   reporter: process.env.CI
-    ? [['github'], ['list'], ['./nala/utils/base-reporter.js']]
+    ? [['github'], ['list'], ['blob'], ['./nala/utils/base-reporter.js']]
     : [
       ['html', { outputFolder: 'test-html-results' }],
       ['list'],
@@ -56,14 +85,25 @@ const config = {
   projects: [
     {
       name: 'milo-live-chromium',
+      testIgnore: [
+        ...miloIgnore,
+        ...getSkipTestFiles('chromium'),
+      ],
+      workers: 4,
       use: {
         ...devices['Desktop Chrome'],
         userAgent: USER_AGENT_DESKTOP,
+        channel: 'chrome',
       },
     },
 
     {
       name: 'milo-live-firefox',
+      testIgnore: [
+        ...miloIgnore,
+        ...getSkipTestFiles('firefox'),
+      ],
+      workers: 5,
       use: {
         ...devices['Desktop Firefox'],
         userAgent: USER_AGENT_DESKTOP,
@@ -71,17 +111,88 @@ const config = {
     },
     {
       name: 'milo-live-webkit',
+      testIgnore: [
+        ...miloIgnore,
+        ...getSkipTestFiles('webkit'),
+      ],
+      workers: 5,
       use: {
         ...devices['Desktop Safari'],
         userAgent: USER_AGENT_DESKTOP,
       },
     },
+    /* MAS test
+     * Workers are limited to 2 to reduce request pressure on EDS / AEM.live.
+     * To enable request-level throttling via eds-throttle.js instead:
+     *   1. Swap the @playwright/test import in MAS test files to nala-test.js.
+     *   2. Uncomment NALA_WORKER_COUNT below — eds-throttle.js uses it to derive
+     *      per-worker RPS automatically (floor(180 / workers)).
+     *   3. Optionally remove the per-project `workers` overrides (they are complementary).
+     */
+    // process.env.NALA_WORKER_COUNT = String(isCI ? 7 : 3);
+    {
+      name: 'mas-chromium',
+      workers: 2,
+      testMatch: isCI ? masFeatures : undefined, // only filter MAS tests in CI
+      use: {
+        ...devices['Desktop Chrome'],
+        userAgent: USER_AGENT_DESKTOP,
+        channel: 'chrome',
+      },
+    },
+    {
+      name: 'mas-firefox',
+      workers: 2,
+      testMatch: isCI ? masFeatures : undefined, // only filter MAS tests in CI
+      use: { ...devices['Desktop Firefox'], userAgent: USER_AGENT_DESKTOP },
+    },
+    {
+      name: 'mas-webkit',
+      workers: 2,
+      testMatch: isCI ? masFeatures : undefined, // only filter MAS tests in CI
+      use: { ...devices['Desktop Safari'], userAgent: USER_AGENT_DESKTOP },
+    },
+
+    /* MEP test
+     * Workers are limited to 2 to reduce request pressure on EDS / AEM.live.
+     * To enable request-level throttling via eds-throttle.js instead:
+     *   1. Swap the @playwright/test import in MEP test files to nala-test.js.
+     *   2. Uncomment NALA_WORKER_COUNT below — eds-throttle.js uses it to derive
+     *      per-worker RPS automatically (floor(180 / workers)).
+     *   3. Optionally remove the per-project `workers` overrides (they are complementary).
+     */
+    // process.env.NALA_WORKER_COUNT = String(isCI ? 7 : 3);
+
+    {
+      name: 'mep-chromium',
+      workers: 2,
+      testMatch: isCI ? mepFeatures : undefined, // only filter MEP tests in CI
+      use: {
+        ...devices['Desktop Chrome'],
+        userAgent: USER_AGENT_DESKTOP,
+        channel: 'chrome',
+      },
+    },
+    {
+      name: 'mep-firefox',
+      workers: 2,
+      testMatch: isCI ? mepFeatures : undefined, // only filter MEP tests in CI
+      use: { ...devices['Desktop Firefox'], userAgent: USER_AGENT_DESKTOP },
+    },
+    {
+      name: 'mep-webkit',
+      workers: 2,
+      testMatch: isCI ? mepFeatures : undefined, // only filter MEP tests in CI
+      use: { ...devices['Desktop Safari'], userAgent: USER_AGENT_DESKTOP },
+    },
+
     /* Test Against Mobile View ports */
     {
       name: 'mobile-chrome-pixel5',
       use: {
         ...devices['Pixel 5'],
         userAgent: USER_AGENT_MOBILE_CHROME,
+        channel: 'chrome',
       },
     },
     {

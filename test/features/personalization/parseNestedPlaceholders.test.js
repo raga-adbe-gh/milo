@@ -21,8 +21,8 @@ describe('test different values for parseNestedPlaceholders', () => {
 });
 describe('test createContent', () => {
   const el = document.createElement('div');
-  it('append action', () => {
-    const newContent = createContent(el, {
+  it('append action', async () => {
+    const newContent = await createContent(el, {
       content: '{{promo-discount}}',
       manifestId: false,
       targetManifestId: false,
@@ -31,9 +31,9 @@ describe('test createContent', () => {
     });
     expect(newContent.innerHTML).to.equal('50');
   });
-  it('replace action', () => {
+  it('replace action', async () => {
     el.innerHTML = 'Hello World';
-    const newContent = createContent(el, {
+    const newContent = await createContent(el, {
       content: '{{promo-discount}}',
       manifestId: false,
       targetManifestId: false,
@@ -75,5 +75,33 @@ describe('parsePlaceholders()', () => {
       },
     ], config);
     expect(response.placeholders).to.exist;
+  });
+});
+
+describe('parsePlaceholders()', () => {
+  it('should not apply placeholders filtered by page/geo', () => {
+    const response = parsePlaceholders([
+      {
+        key: 'marquee-placeholder',
+        'page filter (optional)': '/fr/**',
+        jp: 'Japenese Replaced Header',
+        fr: 'French Replaced Header',
+        value: '',
+      },
+    ], config, 'all', '/products/photoshop');
+    expect(response.placeholders['marquee-placeholder']).to.be.undefined;
+  });
+
+  it('should apply placeholders filtered by page/geo', () => {
+    const response = parsePlaceholders([
+      {
+        key: 'marquee-placeholder',
+        'page filter (optional)': '/fr/**',
+        jp: 'Japenese Replaced Header',
+        fr: 'French Replaced Header',
+        value: '',
+      },
+    ], config, 'fr', '/fr/products/photoshop');
+    expect(response.placeholders['marquee-placeholder']).to.equal('French Replaced Header');
   });
 });

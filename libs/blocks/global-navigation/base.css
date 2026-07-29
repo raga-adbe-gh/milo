@@ -28,8 +28,15 @@
   --feds-color-link: #292929;
   --feds-color-blue-link: #274dea;
   --feds-color-link--hover: #1d3ecf;
+  --feds-color-link-dark: #DBDBDB;
+  --feds-borderColor-link-dark: #393939;
   --feds-color-navLink-description: #505050;
   --feds-color-link-breadcrumbs: #707070;
+
+  /* CTA Buttons */
+  --feds-cta-primary-bg: #3b63fb;
+  --feds-cta-primary-bg--hover: #274dea;
+
   /* Footer */
   --feds-background-footer: #fafafa;
   --feds-borderColor-featuredProducts: #999;
@@ -83,8 +90,16 @@ header.new-nav .feds-nav > section.feds-navItem > .feds-popup .has-subheader .fe
   column-gap: 15px;
 }
 
+html[lang="ja-jp"] a.feds-navLink wbr {
+  display: none;
+}
+
 .feds-navLink--blue {
   color: var(--feds-color-blue-link);
+}
+
+.feds-navLink--black {
+  color: var(--feds-color-link);
 }
 
 .feds-navLink--hoverCaret {
@@ -157,6 +172,7 @@ header.global-navigation.ready {
 
 .feds-navLink-description {
   display: flex;
+  gap: 3px;
   font-size: 12px;
   color: var(--feds-color-navLink-description);
 }

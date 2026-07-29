@@ -1,8 +1,10 @@
+import { CheckoutWorkflowStep, Defaults, Log } from '@adobecom/mas-platform/web-components/dist/commerce.js';
+
 import { expect } from '@esm-bundle/chai';
+import sinon from 'sinon';
 import { delay } from '../../helpers/waitfor.js';
 
-import { CheckoutWorkflowStep, Defaults, Log } from '../../../libs/deps/mas/commerce.js';
-
+import { mepMasStudioUrls } from '../../../libs/blocks/merch/mas-mep-utils.js';
 import merch, {
   PRICE_TEMPLATE_DISCOUNT,
   PRICE_TEMPLATE_OPTICAL,
@@ -21,12 +23,21 @@ import merch, {
   getMasBase,
   getOptions,
   appendDexterParameters,
+  getLocaleSettings,
   getMiloLocaleSettings,
   setCtaHash,
   openModal,
   PRICE_TEMPLATE_LEGAL,
   modalState,
   updateModalState,
+  isFallbackStepUsed,
+  getWorkflowStep,
+  getMasComponentUrl,
+  getMasLibsBaseUrl,
+  getMasLibs,
+  shouldHideStPriceLabels,
+  isMasErrorEnv,
+  createFragmentErrorEl,
 } from '../../../libs/blocks/merch/merch.js';
 import { decorateCardCtasWithA11y, localizePreviewLinks } from '../../../libs/blocks/merch/autoblock.js';
 
@@ -51,6 +62,8 @@ const CHECKOUT_LINK_CONFIGS = {
     FREE_TRIAL_PATH: 'https://www.adobe.com/mini-plans/illustrator.html?mid=ft&web=1',
     BUY_NOW_PATH: 'https://www.adobe.com/plans-fragments/modals/individual/modals-content-rich/illustrator/master.modal.html',
     LOCALE: '',
+    CRM_HASH: 'crm-buy-illustrator',
+    CRM_PATH: 'https://www.adobe.com/plans-fragments/modals/individual/crm/illustrator/master.modal.html',
   },
   {
     PRODUCT_FAMILY: 'PHOTOSHOP',
@@ -61,6 +74,7 @@ const CHECKOUT_LINK_CONFIGS = {
     LOCALE: 'fr',
   },
   { PRODUCT_FAMILY: 'CC_ALL_APPS', DOWNLOAD_URL: 'https://creativecloud.adobe.com/apps/download', LOCALE: '' },
+  { PRODUCT_FAMILY: 'ACROBAT', DOWNLOAD_URL: 'https://creativecloud.adobe.com/apps/download', LOCALE: '' },
   {
     PRODUCT_FAMILY: 'PREMIERE',
     DOWNLOAD_TEXT: 'Download',
@@ -84,6 +98,28 @@ const CHECKOUT_LINK_CONFIGS = {
     FREE_TRIAL_PATH: 'https://www.adobe.com/mini-plans/audition.html?mid=ft&web=1',
     BUY_NOW_PATH: 'www.adobe.com/will/not/be/localized.html',
     LOCALE: '',
+    CRM_HASH: 'crm-buy-audition',
+    CRM_PATH: 'https://www.adobe.com/plans-fragments/modals/individual/crm/audition/master.modal.html',
+  },
+  {
+    PRODUCT_FAMILY: 'CC_ALL_APPS_TEST',
+    DOWNLOAD_TEXT: '',
+    DOWNLOAD_URL: '',
+    FREE_TRIAL_PATH: 'https://www.adobe.com/mini-plans/free_test.html?mid=ft&web=1',
+    BUY_NOW_PATH: 'https://www.adobe.com/mini-plans/buy_test.html?web=1',
+    LOCALE: '',
+    CRM_HASH: 'crm-all-apps-test',
+    CRM_PATH: 'https://www.adobe.com/individual/crm/master.modal.html | https://www.adobe.com/business/crm/master.modal.html?qs=1 | https://www.adobe.com/students/crm/master.modal.html',
+  },
+  {
+    PRODUCT_FAMILY: 'ILLUSTRATOR+abc',
+    DOWNLOAD_TEXT: 'Download',
+    DOWNLOAD_URL: 'https://creativecloud.adobe.com/apps/download/illustrator',
+    FREE_TRIAL_PATH: 'https://www.adobe.com/mini-plans/illustrator_abc.html?mid=ft&web=1',
+    BUY_NOW_PATH: 'https://www.adobe.com/buy/mini-plans/illustrator_abc.html?mid=ft&web=1',
+    LOCALE: '',
+    CRM_HASH: 'crm-buy-illustrator-abc',
+    CRM_PATH: 'https://www.adobe.com/plans-fragments/modals/individual/crm_abc/illustrator/master.modal.html',
   },
   ],
 };
@@ -130,6 +166,20 @@ const SUBSCRIPTION_DATA_ALL_APPS_RAW_ELIGIBLE = [
   },
 ];
 
+const SUBSCRIPTION_DATA_ARCH_RAW_ELIGIBLE = [
+  {
+    change_plan_available: true,
+    offer: { product_code: 'ARCH', product_arrangement_v2: { family: 'ACROBAT' } },
+  },
+];
+
+const SUBSCRIPTION_DATA_ACRO_RAW_ELIGIBLE = [
+  {
+    change_plan_available: true,
+    offer: { product_code: 'ACRO', product_arrangement_v2: { family: 'ACROBAT' } },
+  },
+];
+
 const SUBSCRIPTION_DATA_PHSP_RAW_ELIGIBLE = [
   {
     change_plan_available: true,
@@ -152,6 +202,13 @@ const createCtaInMerchCard = () => {
   const el = document.createElement('a');
   merchCard.appendChild(el);
   return el;
+};
+
+const disable3in1 = () => {
+  const meta = document.createElement('meta');
+  meta.setAttribute('name', 'mas-ff-3in1');
+  meta.setAttribute('content', 'off');
+  document.querySelector('head').appendChild(meta);
 };
 
 describe('Merch Block', () => {
@@ -213,10 +270,50 @@ describe('Merch Block', () => {
         { prefix: '/langstore/el', expectedLocale: 'el_GR' },
         { prefix: '/langstore/uk', expectedLocale: 'uk_UA' },
         { prefix: '/langstore/es-419', expectedLocale: 'es-419_ES' },
+        { prefix: '/pr', expectedLocale: 'es_PR' },
       ].forEach(({ prefix, expectedLocale }) => {
         const computedLocale = getMiloLocaleSettings({ prefix })?.locale;
         expect(computedLocale).to.equal(expectedLocale);
       });
+    });
+
+    it('should use es_PR, es, US for Puerto Rico path', () => {
+      const s = getMiloLocaleSettings({ prefix: '/pr' });
+      expect(s.locale).to.equal('es_PR');
+      expect(s.language).to.equal('es');
+      expect(s.country).to.equal('US');
+    });
+
+    it('should use geo locale for lang-first sites', async () => {
+      sessionStorage.setItem('akamai', 'ES');
+      const geoDetectionMeta = document.createElement('meta');
+      geoDetectionMeta.setAttribute('name', 'mas-geo-detection');
+      geoDetectionMeta.setAttribute('content', 'on');
+      document.head.append(geoDetectionMeta);
+      const data = [
+        { prefix: '/ar', expectedLocale: 'es_AR', expectedCountry: 'ES' },
+        { prefix: '/africa', expectedLocale: 'en_MU', expectedCountry: 'ES' },
+        { prefix: '', expectedLocale: 'en_US', expectedCountry: 'ES' },
+        { prefix: '/ae_ar', expectedLocale: 'ar_AE', expectedCountry: 'ES' },
+        { prefix: '/langstore/en', expectedLocale: 'en_US', expectedCountry: 'ES' },
+        { prefix: '/langstore/es', expectedLocale: 'es_ES', expectedCountry: 'ES' },
+        { prefix: '/langstore/de', expectedLocale: 'de_DE', expectedCountry: 'ES' },
+        { prefix: '/langstore/id', expectedLocale: 'id_ID', expectedCountry: 'ES' },
+        { prefix: '/langstore/hi', expectedLocale: 'hi_IN', expectedCountry: 'ES' },
+        { prefix: '/langstore/ar', expectedLocale: 'ar_DZ', expectedCountry: 'ES' },
+        { prefix: '/langstore/nb', expectedLocale: 'nb_NO', expectedCountry: 'ES' },
+        { prefix: '/langstore/zh-hant', expectedLocale: 'zh-hant_TW', expectedCountry: 'ES' },
+        { prefix: '/langstore/el', expectedLocale: 'el_GR', expectedCountry: 'ES' },
+        { prefix: '/langstore/uk', expectedLocale: 'uk_UA', expectedCountry: 'ES' },
+        { prefix: '/langstore/es-419', expectedLocale: 'es-419_ES', expectedCountry: 'ES' },
+      ];
+      for (const { prefix, expectedLocale, expectedCountry } of data) {
+        const settings = await getLocaleSettings({ prefix });
+        expect(settings?.locale).to.equal(expectedLocale);
+        expect(settings?.country).to.equal(expectedCountry);
+      }
+      sessionStorage.removeItem('akamai');
+      geoDetectionMeta.remove();
     });
   });
 
@@ -268,6 +365,120 @@ describe('Merch Block', () => {
     it('renders merch link to GB price', async () => {
       const el = await validatePriceSpan('.merch.price.gb', {});
       expect(/£/.test(el.textContent)).to.be.true;
+    });
+
+    it('MEP Highlight M@S: stamps data-mas-block=ost and captures original /tools/ost href when mep.preview is on', async () => {
+      setConfig({ ...config, mep: { preview: true } });
+      // Earlier tests consume the canned mock anchors via replaceWith; build
+      // a fresh link in a scoped container.
+      const wrap = createTag('div', { id: 'mep-ost-test-wrap', class: 'merch-mep-ost-test' });
+      const link = createTag(
+        'a',
+        { class: 'merch price', href: '/tools/ost?osi=03&type=price&term=false' },
+        'Price - MEP Test',
+      );
+      wrap.append(link);
+      document.body.append(wrap);
+      const originalHref = link.href;
+      expect(originalHref).to.include('/tools/ost?');
+      const renderedEl = await merch(link);
+      await renderedEl.onceSettled();
+      expect(renderedEl.dataset.masBlock).to.equal('ost');
+      const captured = mepMasStudioUrls.get(renderedEl);
+      expect(captured).to.equal(originalHref);
+      expect(captured).to.include('osi=03');
+      expect(captured).to.include('type=price');
+      expect(captured).to.include('term=false');
+      wrap.remove();
+    });
+
+    it('MEP Highlight M@S: does NOT stamp data-mas-block or capture href when mep.preview is off', async () => {
+      // beforeEach calls setConfig(config) with no mep.preview.
+      const wrap = createTag('div', { id: 'mep-ost-test-wrap-off', class: 'merch-mep-ost-test-off' });
+      const link = createTag(
+        'a',
+        { class: 'merch price', href: '/tools/ost?osi=03&type=price&term=false' },
+        'Price - MEP Test',
+      );
+      wrap.append(link);
+      document.body.append(wrap);
+      const renderedEl = await merch(link);
+      await renderedEl.onceSettled();
+      expect(renderedEl.dataset.masBlock).to.equal(undefined);
+      expect(mepMasStudioUrls.get(renderedEl)).to.equal(undefined);
+      wrap.remove();
+    });
+
+    it('should hide ST price labels with promo price right after', async () => {
+      const div = document.createElement('div');
+      const elementST = document.createElement('a');
+      elementST.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=strikethrough');
+      elementST.setAttribute('class', 'my-price');
+      div.append(elementST);
+      const element = document.createElement('a');
+      element.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=price');
+      div.append(element);
+      document.body.appendChild(div);
+      const hide = await shouldHideStPriceLabels(document.body.querySelector('.my-price'));
+      expect(hide).to.be.true;
+    });
+
+    it('should hide ST price labels with promo price right after and character between', async () => {
+      const div = document.createElement('div');
+      const elementST = document.createElement('a');
+      elementST.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=strikethrough');
+      elementST.setAttribute('class', 'my-price2');
+      div.append(elementST);
+      const text = document.createTextNode('* ');
+      div.append(text);
+      const element = document.createElement('a');
+      element.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=price');
+      div.append(element);
+      document.body.appendChild(div);
+      const hide = await shouldHideStPriceLabels(document.body.querySelector('.my-price2'));
+      expect(hide).to.be.true;
+    });
+
+    it('should not hide ST price labels without promo price', async () => {
+      const div = document.createElement('div');
+      const elementST = document.createElement('a');
+      elementST.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=strikethrough');
+      elementST.setAttribute('class', 'my-price3');
+      div.append(elementST);
+      document.body.appendChild(div);
+      const hide = await shouldHideStPriceLabels(document.body.querySelector('.my-price3'));
+      expect(hide).to.be.false;
+    });
+
+    it('should not hide ST price labels without promo price right after', async () => {
+      const div = document.createElement('div');
+      const elementST = document.createElement('a');
+      elementST.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=strikethrough');
+      elementST.setAttribute('class', 'my-price4');
+      div.append(elementST);
+      const elementI = document.createElement('i');
+      div.append(elementI);
+      const element = document.createElement('a');
+      element.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=price');
+      div.append(element);
+      document.body.appendChild(div);
+      const hide = await shouldHideStPriceLabels(document.body.querySelector('.my-price4'));
+      expect(hide).to.be.false;
+    });
+    it('should not hide ST price labels with some link right after', async () => {
+      const div = document.createElement('div');
+      const elementST = document.createElement('a');
+      elementST.setAttribute('href', 'https://milo.adobe.com/tools/ost?osi=xxx&type=strikethrough');
+      elementST.setAttribute('class', 'my-price4');
+      div.append(elementST);
+      const elementI = document.createElement('i');
+      div.append(elementI);
+      const element = document.createElement('a');
+      element.setAttribute('href', 'https://www.adobe.com/plans');
+      div.append(element);
+      document.body.appendChild(div);
+      const hide = await shouldHideStPriceLabels(document.body.querySelector('.my-price4'));
+      expect(hide).to.be.false;
     });
   });
 
@@ -518,6 +729,14 @@ describe('Merch Block', () => {
 
       expect(classList.contains('con-button')).to.be.true;
     });
+
+    it('sets target _blank if target is _blank', async () => {
+      const el = await merch(document.querySelector(
+        '.merch.cta.blank',
+      ));
+      await el.onceSettled();
+      expect(el.getAttribute('target')).to.equal('_blank');
+    });
   });
 
   describe('function "getCheckoutContext"', () => {
@@ -573,7 +792,7 @@ describe('Merch Block', () => {
       await initService(true);
       const cta1 = await merch(document.querySelector('.merch.cta.download'));
       await cta1.onceSettled();
-      const [{ DOWNLOAD_URL }] = CHECKOUT_LINK_CONFIGS.data;
+      const { DOWNLOAD_URL } = CHECKOUT_LINK_CONFIGS.data[1];
       expect(cta1.textContent).to.equal('Download');
       expect(cta1.href).to.equal(DOWNLOAD_URL);
 
@@ -598,7 +817,7 @@ describe('Merch Block', () => {
       await initService(true);
       const cta = await merch(document.querySelector('.merch.cta.download.fr'));
       await cta.onceSettled();
-      const [,, { DOWNLOAD_URL }] = CHECKOUT_LINK_CONFIGS.data;
+      const { DOWNLOAD_URL } = CHECKOUT_LINK_CONFIGS.data[3];
       expect(cta.textContent).to.equal(newConfig.placeholders.download);
       expect(cta.href).to.equal(DOWNLOAD_URL);
     });
@@ -639,6 +858,46 @@ describe('Merch Block', () => {
       expect(url).to.equal('https://creativecloud.adobe.com/apps/download');
     });
 
+    it('getDownloadAction: returns download action for ACRO', async () => {
+      fetchEntitlements.promise = undefined;
+      mockIms();
+      getUserEntitlements();
+      mockIms('US');
+      setSubscriptionsData(SUBSCRIPTION_DATA_ACRO_RAW_ELIGIBLE);
+      const { url } = await getDownloadAction({ entitlement: true }, Promise.resolve(true), [{ productArrangement: { productCode: 'ACRO', productFamily: 'ACROBAT' } }]);
+      expect(url).to.equal('https://creativecloud.adobe.com/apps/download');
+    });
+
+    it('getDownloadAction: returns download action for ARCH - ARCH', async () => {
+      fetchEntitlements.promise = undefined;
+      mockIms();
+      getUserEntitlements();
+      mockIms('US');
+      setSubscriptionsData(SUBSCRIPTION_DATA_ARCH_RAW_ELIGIBLE);
+      const { url } = await getDownloadAction({ entitlement: true }, Promise.resolve(true), [{ productArrangement: { productCode: 'ARCH', productFamily: 'ACROBAT' } }]);
+      expect(url).to.equal('https://creativecloud.adobe.com/apps/download');
+    });
+
+    it('getDownloadAction: returns download action for ARCH - APCC', async () => {
+      fetchEntitlements.promise = undefined;
+      mockIms();
+      getUserEntitlements();
+      mockIms('US');
+      setSubscriptionsData(SUBSCRIPTION_DATA_ARCH_RAW_ELIGIBLE);
+      const { url } = await getDownloadAction({ entitlement: true }, Promise.resolve(true), [{ productArrangement: { productCode: 'APCC', productFamily: 'ACROBAT' } }]);
+      expect(url).to.equal('https://creativecloud.adobe.com/apps/download');
+    });
+
+    it('getDownloadAction: returns download action for ARCH - ACRO', async () => {
+      fetchEntitlements.promise = undefined;
+      mockIms();
+      getUserEntitlements();
+      mockIms('US');
+      setSubscriptionsData(SUBSCRIPTION_DATA_ARCH_RAW_ELIGIBLE);
+      const checkoutLinkConfig = await getDownloadAction({ entitlement: true }, Promise.resolve(true), [{ productArrangement: { productCode: 'ACRO', productFamily: 'ACROBAT' } }]);
+      expect(checkoutLinkConfig).to.be.undefined;
+    });
+
     it('getCheckoutAction: handles errors gracefully', async () => {
       const imsSignedInPromise = new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -666,6 +925,102 @@ describe('Merch Block', () => {
       const sourceCta = await merch(document.querySelector('.merch.cta.upgrade-source'));
       await sourceCta.onceSettled();
       expect(sourceCta.textContent).to.equal('Upgrade Now');
+    });
+
+    it('uses Acrobat-specific upgrade flow for Acrobat Studio OSI', async () => {
+      mockIms();
+      getUserEntitlements();
+      mockIms('US');
+      const ACROBAT_ENTITLEMENT = [
+        {
+          change_plan_available: true,
+          offer: {
+            offer_id: 'TEST_OFFER_ID',
+            product_code: 'ACAI',
+            product_arrangement_v2: { family: 'ACROBAT' },
+          },
+        },
+      ];
+      setSubscriptionsData(ACROBAT_ENTITLEMENT);
+
+      const upgradeOfferContainer = document.createElement('div');
+      upgradeOfferContainer.classList.add('merch-offers', 'upgrade');
+      const upgradeOfferLink = document.createElement('a');
+      upgradeOfferLink.setAttribute('href', '/tools/ost?osi=V3W0kzf4e6M2Ht1hP9ZAt3dQNmhuDFrmYmEPlE2SlG0&type=checkoutUrl');
+      upgradeOfferLink.setAttribute('data-wcs-osi', 'V3W0kzf4e6M2Ht1hP9ZAt3dQNmhuDFrmYmEPlE2SlG0');
+      upgradeOfferContainer.appendChild(upgradeOfferLink);
+      document.body.appendChild(upgradeOfferContainer);
+
+      const merchCard = document.createElement('merch-card');
+      merchCard.setAttribute('name', 'acrobat');
+      const upgradeEl = document.createElement('a');
+      upgradeEl.classList.add('merch', 'cta');
+      upgradeEl.setAttribute('href', '/tools/ost?osi=V3W0kzf4e6M2Ht1hP9ZAt3dQNmhuDFrmYmEPlE2SlG0&type=checkoutUrl&upgrade=true');
+      upgradeEl.setAttribute('aria-label', 'Buy Now Acrobat Studio');
+      upgradeEl.textContent = 'Buy Now';
+      merchCard.appendChild(upgradeEl);
+      document.body.appendChild(merchCard);
+
+      await merch(upgradeOfferLink);
+
+      const cta = await merch(upgradeEl);
+      await cta.onceSettled();
+
+      expect(cta).to.exist;
+      expect(cta.getAttribute('aria-label')).to.equal('Upgrade Now Acrobat Studio');
+
+      document.body.removeChild(merchCard);
+      document.body.removeChild(upgradeOfferContainer);
+    });
+
+    it('removes other checkout links when upgrade action is set', async () => {
+      mockIms();
+      getUserEntitlements();
+      mockIms('US');
+      setSubscriptionsData(SUBSCRIPTION_DATA_PHSP_RAW_ELIGIBLE);
+
+      const upgradeOfferContainer = document.createElement('div');
+      upgradeOfferContainer.classList.add('merch-offers', 'upgrade');
+      const upgradeOfferLink = document.createElement('a');
+      upgradeOfferLink.setAttribute('href', '/tools/ost?osi=632B3ADD940A7FBB7864AA5AD19B8D28&type=checkoutUrl');
+      upgradeOfferLink.setAttribute('data-wcs-osi', '632B3ADD940A7FBB7864AA5AD19B8D28');
+      upgradeOfferContainer.appendChild(upgradeOfferLink);
+      document.body.appendChild(upgradeOfferContainer);
+
+      const merchCard = document.createElement('merch-card');
+      merchCard.setAttribute('name', 'photoshop');
+
+      const upgradeLink = document.createElement('a');
+      upgradeLink.classList.add('merch', 'cta');
+      upgradeLink.setAttribute('href', '/tools/ost?osi=632B3ADD940A7FBB7864AA5AD19B8D28&type=checkoutUrl&upgrade=true');
+      upgradeLink.textContent = 'Upgrade';
+
+      const otherLink1 = document.createElement('a');
+      otherLink1.setAttribute('is', 'checkout-link');
+      otherLink1.setAttribute('href', '/tools/ost?osi=other1&type=checkoutUrl');
+      otherLink1.textContent = 'Other Link 1';
+
+      const otherLink2 = document.createElement('a');
+      otherLink2.setAttribute('is', 'checkout-link');
+      otherLink2.setAttribute('href', '/tools/ost?osi=other2&type=checkoutUrl');
+      otherLink2.textContent = 'Other Link 2';
+
+      merchCard.appendChild(upgradeLink);
+      merchCard.appendChild(otherLink1);
+      merchCard.appendChild(otherLink2);
+      document.body.appendChild(merchCard);
+
+      expect(merchCard.querySelectorAll('a').length).to.equal(3);
+
+      await merch(upgradeOfferLink);
+
+      const cta = await merch(upgradeLink);
+      await cta?.onceSettled();
+
+      expect(merchCard.querySelector('a')).to.exist;
+
+      document.body.removeChild(merchCard);
+      document.body.removeChild(upgradeOfferContainer);
     });
   });
 
@@ -763,6 +1118,22 @@ describe('Merch Block', () => {
       expect(checkoutLinkConfig.DOWNLOAD_TEXT).to.equal('paCode');
     });
 
+    it('getCheckoutLinkConfig: finds using paCode and svar', async () => {
+      const options = { extraOptions: '{"svar": "abc", "other": "xyz"}' };
+      const checkoutLinkConfig = await getCheckoutLinkConfig(undefined, undefined, 'ILLUSTRATOR', options);
+      expect(checkoutLinkConfig.FREE_TRIAL_PATH).to.equal('https://www.adobe.com/mini-plans/illustrator_abc.html?mid=ft&web=1');
+      expect(checkoutLinkConfig.BUY_NOW_PATH).to.equal('https://www.adobe.com/buy/mini-plans/illustrator_abc.html?mid=ft&web=1');
+      expect(checkoutLinkConfig.CRM_PATH).to.equal('https://www.adobe.com/plans-fragments/modals/individual/crm_abc/illustrator/master.modal.html');
+    });
+
+    it('getCheckoutLinkConfig: finds using paCode and no svar', async () => {
+      const options = { extraOptions: '{"other": "xyz"}' };
+      const checkoutLinkConfig = await getCheckoutLinkConfig(undefined, undefined, 'ILLUSTRATOR', options);
+      expect(checkoutLinkConfig.FREE_TRIAL_PATH).to.equal('https://www.adobe.com/mini-plans/illustrator.html?mid=ft&web=1');
+      expect(checkoutLinkConfig.BUY_NOW_PATH).to.equal('https://www.adobe.com/plans-fragments/modals/individual/modals-content-rich/illustrator/master.modal.html');
+      expect(checkoutLinkConfig.CRM_PATH).to.equal('https://www.adobe.com/plans-fragments/modals/individual/crm/illustrator/master.modal.html');
+    });
+
     it('getCheckoutLinkConfig: finds using productCode', async () => {
       let checkoutLinkConfig = await getCheckoutLinkConfig(undefined, 'testProductCode', undefined);
       expect(checkoutLinkConfig.DOWNLOAD_TEXT).to.equal('productCode');
@@ -798,6 +1169,48 @@ describe('Merch Block', () => {
       expect(action.url).to.equal('https://www.adobe.com/fr/plans-fragments/modals/individual/modals-content-rich/illustrator/master.modal.html');
     });
 
+    it('getModalAction: rewrites host to www.stage.adobe.com if on Stage or aem.page', async () => {
+      setConfig({
+        ...config,
+        prodDomains: PROD_DOMAINS,
+        placeholders: { download: 'Télécharger' },
+      });
+      fetchCheckoutLinkConfigs.promise = undefined;
+      setCheckoutLinkConfigs(CHECKOUT_LINK_CONFIGS);
+      const action = await getModalAction([{ productArrangement: { productFamily: 'ILLUSTRATOR' } }], { modal: true }, undefined, true);
+      expect(action.url).to.equal('https://www.stage.adobe.com/plans-fragments/modals/individual/modals-content-rich/illustrator/master.modal.html');
+    });
+
+    it('getModalAction: localize crm path if it comes from us/en production', async () => {
+      setConfig({
+        ...config,
+        pathname: '/fr/test.html',
+        locales: { fr: { ietf: 'fr-FR' } },
+        prodDomains: PROD_DOMAINS,
+        placeholders: { download: 'Télécharger' },
+      });
+      fetchCheckoutLinkConfigs.promise = undefined;
+      setCheckoutLinkConfigs(CHECKOUT_LINK_CONFIGS);
+      const el = document.createElement('a');
+      el.setAttribute('data-modal', 'crm');
+      const action = await getModalAction([{ productArrangement: { productFamily: 'ILLUSTRATOR' } }], { modal: true }, el);
+      expect(action.url).to.equal('https://www.adobe.com/fr/plans-fragments/modals/individual/crm/illustrator/master.modal.html');
+    });
+
+    it('getModalAction: rewrites host on crm path to www.stage.adobe.com if on Stage or aem.page', async () => {
+      setConfig({
+        ...config,
+        prodDomains: PROD_DOMAINS,
+        placeholders: { download: 'Télécharger' },
+      });
+      fetchCheckoutLinkConfigs.promise = undefined;
+      setCheckoutLinkConfigs(CHECKOUT_LINK_CONFIGS);
+      const el = document.createElement('a');
+      el.setAttribute('data-modal', 'crm');
+      const action = await getModalAction([{ productArrangement: { productFamily: 'ILLUSTRATOR' } }], { modal: true }, el, true);
+      expect(action.url).to.equal('https://www.stage.adobe.com/plans-fragments/modals/individual/crm/illustrator/master.modal.html');
+    });
+
     it('getModalAction: skip modal url localization if url is invalid', async () => {
       setConfig({
         ...config,
@@ -819,14 +1232,89 @@ describe('Merch Block', () => {
       expect(action).to.be.undefined;
     });
 
+    it('getModalAction: returns crm path for Individuals', async () => {
+      setConfig({
+        ...config,
+        prodDomains: PROD_DOMAINS,
+        placeholders: { download: 'Télécharger' },
+      });
+      fetchCheckoutLinkConfigs.promise = undefined;
+      setCheckoutLinkConfigs(CHECKOUT_LINK_CONFIGS);
+      const el = document.createElement('a');
+      el.setAttribute('data-modal', 'crm');
+      el.isOpen3in1Modal = false;
+      el.isCheckoutLink = true;
+      const action = await getModalAction([{ productArrangement: { productFamily: 'CC_ALL_APPS_TEST' }, customerSegment: 'INDIVIDUAL', marketSegments: ['COM'] }], { modal: true }, el);
+      expect(action.url).to.equal('https://www.adobe.com/individual/crm/master.modal.html');
+    });
+
+    it('getModalAction: returns crm path for Business', async () => {
+      setConfig({
+        ...config,
+        prodDomains: PROD_DOMAINS,
+        placeholders: { download: 'Télécharger' },
+      });
+      fetchCheckoutLinkConfigs.promise = undefined;
+      setCheckoutLinkConfigs(CHECKOUT_LINK_CONFIGS);
+      const el = document.createElement('a');
+      el.setAttribute('data-modal', 'crm');
+      el.isOpen3in1Modal = false;
+      el.isCheckoutLink = true;
+      const action = await getModalAction([{ productArrangement: { productFamily: 'CC_ALL_APPS_TEST' }, customerSegment: 'TEAM', marketSegments: ['COM'] }], { modal: true }, el);
+      expect(action.url).to.equal('https://www.adobe.com/business/crm/master.modal.html?qs=1');
+    });
+
+    it('getModalAction: returns free trial path for crm modal if 3in1 enabled', async () => {
+      setConfig({
+        ...config,
+        prodDomains: PROD_DOMAINS,
+        placeholders: { download: 'Télécharger' },
+      });
+      fetchCheckoutLinkConfigs.promise = undefined;
+      setCheckoutLinkConfigs(CHECKOUT_LINK_CONFIGS);
+      const el = document.createElement('a');
+      el.setAttribute('data-modal', 'crm');
+      el.isOpen3in1Modal = true;
+      el.isCheckoutLink = true;
+      const action = await getModalAction([{ productArrangement: { productFamily: 'CC_ALL_APPS_TEST' }, customerSegment: 'INDIVIDUAL', marketSegments: ['COM'], offerType: 'TRIAL' }], { modal: true }, el);
+      expect(action.url).to.equal('https://www.adobe.com/mini-plans/free_test.html?mid=ft&web=1');
+    });
+
     it('setCtaHash: sets authored hash', async () => {
       const el = createCtaInMerchCard();
       const hash = setCtaHash(el, { FREE_TRIAL_HASH: 'try-photoshop-authored' }, 'TRIAL');
       expect(hash).to.equal('try-photoshop-authored');
     });
 
+    it('setCtaHash: sets authored CRM hash', async () => {
+      const el = createCtaInMerchCard();
+      el.setAttribute('data-modal', 'crm');
+      el.isOpen3in1Modal = false;
+      const hash = setCtaHash(el, { CRM_HASH: 'crm-phsp' }, 'BASE');
+      expect(hash).to.equal('crm-phsp');
+    });
+
+    it('setCtaHash: sets authored CRM hash when 3in1 is enabled', async () => {
+      const el = createCtaInMerchCard();
+      el.setAttribute('data-modal', 'crm');
+      el.isOpen3in1Modal = true;
+      const hash = setCtaHash(el, { CRM_HASH: 'crm-phsp', FREE_TRIAL_HASH: 'try-photoshop-authored' }, 'TRIAL');
+      expect(hash).to.equal('try-photoshop-authored');
+    });
+
     it('setCtaHash: does nothing with invalid params', async () => {
       expect(setCtaHash()).to.be.undefined;
+    });
+
+    it('applyDexterPromo: applies promo to external modal', () => {
+      const url = 'https://www.adobe.com/plans-fragments/modals/all-apps/master.modal.html';
+      const promoUrl = 'https://www.adobe.com/plans-fragments/modals/all-apps/black-friday.modal.html';
+      setConfig({
+        ...config,
+        mep: { inBlock: { merch: { fragments: { '/plans-fragments/modals/all-apps/master.modal.html': { content: promoUrl } } } } },
+      });
+      const resultUrl = appendDexterParameters(url);
+      expect(resultUrl).to.equal(promoUrl);
     });
 
     const MODAL_URLS = [
@@ -1004,8 +1492,8 @@ describe('Merch Block', () => {
       expect(getOptions(a).fragment).to.be.undefined;
     });
   });
-  describe('Localize preview links', () => {
-    it('check if only preview URL is relative', () => {
+  describe('Localize preview links', async () => {
+    it('check if only preview URL is relative', async () => {
       const div = document.createElement('div');
 
       const a1 = document.createElement('a');
@@ -1015,7 +1503,7 @@ describe('Merch Block', () => {
 
       const a2 = document.createElement('a');
       a2.classList.add('link2');
-      a2.setAttribute('href', 'https://main--cc--adobecom.hlx.live/test/cc/path');
+      a2.setAttribute('href', 'https://main--cc--adobecom.aem.live/test/cc/path');
       div.append(a2);
 
       const a3 = document.createElement('a');
@@ -1026,11 +1514,268 @@ describe('Merch Block', () => {
       const aNoHref = document.createElement('a');
       div.append(aNoHref);
 
-      localizePreviewLinks(div);
+      await localizePreviewLinks(div);
 
       expect(div.querySelector('.link1').getAttribute('href')).to.equal('/test/milo/path');
       expect(div.querySelector('.link2').getAttribute('href')).to.equal('/test/cc/path');
       expect(div.querySelector('.link3').getAttribute('href')).to.equal('https://mas.adobe.com/studio.html#content-type=merch-card-collection&path=acom');
     });
+  });
+
+  describe('isFallbackStepUsed', () => {
+    it('returns true if modal is 3-in-1, fallbackStep is provided and 3-in-1 is disabled', () => {
+      disable3in1();
+      expect(isFallbackStepUsed({
+        modal: 'twp',
+        fallbackStep: 'commitment',
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        checkoutClientId: 'doc_cloud',
+      })).to.be.true;
+      expect(isFallbackStepUsed({
+        modal: 'd2p',
+        fallbackStep: 'commitment',
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        checkoutClientId: 'doc_cloud',
+      })).to.be.true;
+      expect(isFallbackStepUsed({
+        modal: 'crm',
+        fallbackStep: 'commitment',
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        checkoutClientId: 'doc_cloud',
+      })).to.be.true;
+      document.querySelector('meta[name="mas-ff-3in1"]').remove();
+    });
+
+    it('returns false if 3-in-1 is enabled', () => {
+      expect(isFallbackStepUsed({
+        modal: 'crm',
+        fallbackStep: 'commitment',
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        checkoutClientId: 'adobe_com',
+      })).to.be.false;
+    });
+
+    it('returns false if modal is not 3-in-1', () => {
+      expect(isFallbackStepUsed({
+        modal: undefined,
+        fallbackStep: 'commitment',
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        checkoutClientId: 'doc_cloud',
+      })).to.be.false;
+      expect(isFallbackStepUsed({
+        modal: 'typo',
+        fallbackStep: 'commitment',
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        checkoutClientId: 'doc_cloud',
+      })).to.be.false;
+    });
+  });
+
+  describe('getWorkflowStep', () => {
+    it('returns checkoutWorkflowStep if 3-in-1 is enabled', () => {
+      const workflowStep = getWorkflowStep({
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        modal: 'twp',
+        fallbackStep: 'commitment',
+        checkoutWorkflowStep: 'segmentation',
+        checkoutClientId: 'doc_cloud',
+      });
+      expect(workflowStep).to.equal('segmentation');
+    });
+
+    it('returns checkoutWorkflowStep if fallbackStep is not provided', () => {
+      disable3in1();
+      const workflowStep = getWorkflowStep({
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        modal: 'twp',
+        fallbackStep: undefined,
+        checkoutWorkflowStep: 'segmentation',
+        checkoutClientId: 'adobe_com',
+      });
+      expect(workflowStep).to.equal('segmentation');
+      document.querySelector('meta[name="mas-ff-3in1"]').remove();
+    });
+
+    it('returns fallbackStep if fallbackStep is provided, and 3-in-1 is disabled', () => {
+      disable3in1();
+      const workflowStep = getWorkflowStep({
+        wcsOsi: 'vQmS1H18A6_kPd0tYBgKnp-TQIF0GbT6p8SH8rWcLMs',
+        modal: 'twp',
+        fallbackStep: 'commitment',
+        checkoutWorkflowStep: 'segmentation',
+        checkoutClientId: 'doc_cloud',
+      });
+      expect(workflowStep).to.equal('commitment');
+      document.querySelector('meta[name="mas-ff-3in1"]').remove();
+    });
+  });
+
+  describe('getMasComponentUrl', () => {
+    it('returns correct URL based on masLibsBase and hostname', () => {
+      // When masLibsBase is provided, use it regardless of hostname
+      expect(getMasComponentUrl('commerce', 'https://main--mas--adobecom.aem.live/web-components/dist', 'www.adobe.com'))
+        .to.equal('https://main--mas--adobecom.aem.live/web-components/dist/commerce.js');
+      expect(getMasComponentUrl('merch-card', 'https://main--mas--adobecom.aem.live/web-components/dist', 'www.stage.adobe.com'))
+        .to.equal('https://main--mas--adobecom.aem.live/web-components/dist/merch-card.js');
+
+      // When masLibsBase is null and hostname is www.adobe.com, use Adobe prod URL
+      expect(getMasComponentUrl('commerce', null, 'www.adobe.com'))
+        .to.equal('https://www.adobe.com/mas/libs/commerce.js');
+
+      // When masLibsBase is null and hostname is not www.adobe.com, use aem.live URL
+      expect(getMasComponentUrl('commerce', null, 'www.stage.adobe.com'))
+        .to.equal('https://main--mas--adobecom.aem.live/web-components/dist/commerce.js');
+      expect(getMasComponentUrl('merch-card', null, 'main--cc--adobecom.aem.live'))
+        .to.equal('https://main--mas--adobecom.aem.live/web-components/dist/merch-card.js');
+      expect(getMasComponentUrl('commerce', null, 'localhost'))
+        .to.equal('https://main--mas--adobecom.aem.live/web-components/dist/commerce.js');
+    });
+  });
+
+  describe('getMasLibsBaseUrl', () => {
+    const originalHref = window.location.href;
+
+    afterEach(() => {
+      window.history.pushState({}, '', originalHref);
+    });
+
+    it('returns correct base URL for all maslibs parameter variations', () => {
+      // No maslibs parameter
+      window.history.pushState({}, '', '/');
+      expect(getMasLibsBaseUrl()).to.be.null;
+
+      // Empty maslibs parameter
+      window.history.pushState({}, '', '/?maslibs=');
+      expect(getMasLibsBaseUrl()).to.be.null;
+
+      // Local development
+      window.history.pushState({}, '', '/?maslibs=local');
+      expect(getMasLibsBaseUrl()).to.equal('http://localhost:3000');
+
+      // Main branch
+      window.history.pushState({}, '', '/?maslibs=main');
+      expect(getMasLibsBaseUrl()).to.equal('https://main--mas--adobecom.aem.live');
+
+      // Feature branch (simple name)
+      window.history.pushState({}, '', '/?maslibs=feature-branch');
+      expect(getMasLibsBaseUrl()).to.equal('https://feature-branch--mas--adobecom.aem.live');
+
+      // Full branch name with --mas--
+      window.history.pushState({}, '', '/?maslibs=mybranch--mas--adobecom');
+      expect(getMasLibsBaseUrl()).to.equal('https://mybranch--mas--adobecom.aem.live');
+
+      // Branch name with -- but not --mas--
+      window.history.pushState({}, '', '/?maslibs=feature--other--repo');
+      expect(getMasLibsBaseUrl()).to.equal('https://feature--other--repo.aem.live');
+    });
+
+    it('always uses .aem.live (never .aem.page regardless of hostname)', () => {
+      // MWPW-189073: base URL always uses .aem.live, not hostname-based .page vs .live
+      window.history.pushState({}, '', '/?maslibs=main');
+      const url = getMasLibsBaseUrl();
+      expect(url).to.include('.aem.live');
+      expect(url).to.not.include('.aem.page');
+      window.history.pushState({}, '', '/?maslibs=some-branch');
+      const url2 = getMasLibsBaseUrl();
+      expect(url2).to.include('.aem.live');
+      expect(url2).to.not.include('.aem.page');
+    });
+  });
+
+  describe('getMasLibs', () => {
+    const originalHref = window.location.href;
+
+    afterEach(() => {
+      window.history.pushState({}, '', originalHref);
+    });
+
+    it('returns correct web-components URL for maslibs parameter variations', () => {
+      // No maslibs parameter
+      window.history.pushState({}, '', '/');
+      expect(getMasLibs()).to.be.null;
+
+      // Local development
+      window.history.pushState({}, '', '/?maslibs=local');
+      expect(getMasLibs()).to.equal('http://localhost:3000/web-components/dist');
+
+      // Main branch
+      window.history.pushState({}, '', '/?maslibs=main');
+      expect(getMasLibs()).to.equal('https://main--mas--adobecom.aem.live/web-components/dist');
+
+      // Feature branch
+      window.history.pushState({}, '', '/?maslibs=feature-branch');
+      expect(getMasLibs()).to.equal('https://feature-branch--mas--adobecom.aem.live/web-components/dist');
+    });
+  });
+});
+
+describe('isMasErrorEnv', () => {
+  it('returns true for localhost', () => {
+    expect(isMasErrorEnv('localhost:6456')).to.be.true;
+  });
+
+  it('returns true for aem.page', () => {
+    expect(isMasErrorEnv('main--milo--adobecom.aem.page')).to.be.true;
+  });
+
+  it('returns false for aem.live', () => {
+    expect(isMasErrorEnv('main--milo--adobecom.aem.live')).to.be.false;
+  });
+
+  it('returns false for stage.adobe.com', () => {
+    expect(isMasErrorEnv('stage.adobe.com')).to.be.false;
+  });
+
+  it('returns false for www.adobe.com', () => {
+    expect(isMasErrorEnv('www.adobe.com')).to.be.false;
+  });
+});
+
+describe('createFragmentErrorEl', () => {
+  let fetchStub;
+
+  afterEach(() => {
+    fetchStub?.restore();
+  });
+
+  it('shows Not Found badge when fragment API returns 404', async () => {
+    fetchStub = sinon.stub(window, 'fetch').resolves(new Response('', { status: 404 }));
+    const el = await createFragmentErrorEl('test-uuid', 'Card');
+    expect(el.classList.contains('mas-frag-error')).to.be.true;
+    expect(el.querySelector('.mas-frag-error-badge').textContent).to.equal('Not Found');
+    expect(el.querySelector('.mas-frag-error-label').textContent).to.equal('Card:');
+    expect(el.querySelector('.mas-frag-error-id').textContent).to.equal('test-uuid');
+  });
+
+  it('shows Load Error badge when fragment API returns non-404', async () => {
+    fetchStub = sinon.stub(window, 'fetch').resolves(new Response('', { status: 500 }));
+    const el = await createFragmentErrorEl('test-uuid', 'Card');
+    expect(el.querySelector('.mas-frag-error-badge').textContent).to.equal('Load Error');
+  });
+
+  it('shows Load Error badge when fetch throws', async () => {
+    fetchStub = sinon.stub(window, 'fetch').rejects(new Error('network error'));
+    const el = await createFragmentErrorEl('test-uuid', 'Card');
+    expect(el.querySelector('.mas-frag-error-badge').textContent).to.equal('Load Error');
+  });
+
+  it('uses Collection label for collections', async () => {
+    fetchStub = sinon.stub(window, 'fetch').resolves(new Response('', { status: 404 }));
+    const el = await createFragmentErrorEl('some-collection', 'Collection');
+    expect(el.querySelector('.mas-frag-error-label').textContent).to.equal('Collection:');
+    expect(el.querySelector('.mas-frag-error-id').textContent).to.equal('some-collection');
+  });
+
+  it('shows unknown when uuid is not provided', async () => {
+    const el = await createFragmentErrorEl(null, 'Card');
+    expect(el.querySelector('.mas-frag-error-id').textContent).to.equal('unknown');
+    expect(el.querySelector('.mas-frag-error-badge').textContent).to.equal('Load Error');
+  });
+
+  it('shows Not Found when status 404 is passed directly without fetching', async () => {
+    fetchStub = sinon.stub(window, 'fetch');
+    const el = await createFragmentErrorEl('test-uuid', 'Card', 404);
+    expect(el.querySelector('.mas-frag-error-badge').textContent).to.equal('Not Found');
+    expect(fetchStub.called).to.be.false;
   });
 });
